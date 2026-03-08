@@ -121,3 +121,4 @@ MIT
 
 - Home Assistant docs: https://www.home-assistant.io/docs/
 - HA backup models: https://github.com/home-assistant/core/blob/dev/homeassistant/components/backup/models.py
+- Device provisioning guide: [docs/DEVICE_PROVISIONING_GUIDE.md](docs/DEVICE_PROVISIONING_GUIDE.md)
