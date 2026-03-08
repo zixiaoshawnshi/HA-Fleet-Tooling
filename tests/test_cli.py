@@ -1,13 +1,16 @@
-﻿"""Tests for CLI commands."""
+"""Tests for CLI commands."""
 
+import io
+import json
 import shutil
+import tarfile
 import uuid
 from pathlib import Path
 
 import yaml
 from click.testing import CliRunner
 
-from ha_fleet.cli.commands import bundle_to_backup, diff, validate
+from ha_fleet.cli.commands import bundle_to_backup, diff, ingest_backup, validate
 
 TEST_ROOT = Path("tests") / "_tmp"
 
@@ -32,6 +35,32 @@ def _write_manifest(site_dir: Path, bundles: list[str]) -> None:
     }
     with open(site_dir / "site_manifest.yaml", "w", encoding="utf-8") as f:
         yaml.safe_dump(manifest, f)
+
+
+def _write_json_member(tar: tarfile.TarFile, name: str, payload: dict) -> None:
+    data = json.dumps(payload).encode("utf-8")
+    info = tarfile.TarInfo(name=name)
+    info.size = len(data)
+    tar.addfile(info, io.BytesIO(data))
+
+
+def _create_backup_with_registries(path: Path) -> None:
+    with tarfile.open(path, "w:gz") as tar:
+        _write_json_member(
+            tar,
+            ".storage/core.device_registry",
+            {"data": {"devices": [{"id": "dev1", "name": "Sensor Device"}]}},
+        )
+        _write_json_member(
+            tar,
+            ".storage/core.entity_registry",
+            {"data": {"entities": [{"entity_id": "sensor.temp", "platform": "mqtt"}]}},
+        )
+        _write_json_member(
+            tar,
+            ".storage/core.config_entries",
+            {"data": {"entries": [{"entry_id": "cfg1", "domain": "mqtt", "title": "MQTT"}]}},
+        )
 
 
 def test_validate_strict_fails_missing_bundle_definition() -> None:
@@ -111,5 +140,40 @@ def test_bundle_to_backup_accepts_exclude_flags() -> None:
 
         assert result.exit_code == 0
         assert output.exists()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_ingest_backup_writes_snapshot_file() -> None:
+    """Ingest command should extract registries and write discovery snapshot."""
+    case_dir = _new_case_dir()
+    try:
+        (case_dir / "bundles").mkdir()
+        (case_dir / "overlays").mkdir()
+        _write_manifest(case_dir, bundles=[])
+
+        backup_path = case_dir / "ha_backup.tar.gz"
+        _create_backup_with_registries(backup_path)
+
+        output_path = case_dir / "discovery" / "latest.yaml"
+        runner = CliRunner()
+        result = runner.invoke(
+            ingest_backup,
+            [
+                "--site-path",
+                str(case_dir),
+                "--backup",
+                str(backup_path),
+                "--output",
+                str(output_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert output_path.exists()
+        snapshot = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+        assert snapshot["counts"]["devices"] == 1
+        assert snapshot["counts"]["entities"] == 1
+        assert snapshot["counts"]["config_entries"] == 1
     finally:
         _cleanup_case_dir(case_dir)

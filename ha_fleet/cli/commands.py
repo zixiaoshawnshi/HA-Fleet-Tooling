@@ -8,6 +8,7 @@ import yaml
 
 from ha_fleet.backup.haos import HAOSBackupGenerator
 from ha_fleet.bundles.engine import BundleEngine
+from ha_fleet.discovery.ingest import BackupDiscoveryIngestor
 from ha_fleet.render.config import ConfigRenderer
 from ha_fleet.schemas.bundle import BundleDefinition
 from ha_fleet.schemas.site import SiteManifest
@@ -215,3 +216,51 @@ def diff(site_path: str, from_version: Optional[str]) -> None:
     click.echo("diff is not implemented yet", err=True)
     click.echo(f"site_path={site_path}, from_version={from_version}", err=True)
     raise click.exceptions.Exit(2)
+
+
+@click.command(name="ingest-backup")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to site directory",
+)
+@click.option(
+    "--backup",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to HA backup tar/tar.gz file",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output snapshot file path (default: <site>/discovery/latest.yaml)",
+)
+def ingest_backup(site_path: str, backup: str, output: Optional[str]) -> None:
+    """Ingest discovery data from an HA backup and write a sanitized snapshot."""
+    site_dir = Path(site_path)
+    backup_path = Path(backup)
+    output_path = Path(output) if output else site_dir / "discovery" / "latest.yaml"
+
+    try:
+        manifest = _load_manifest(site_dir)
+        ingestor = BackupDiscoveryIngestor()
+        snapshot = ingestor.ingest(
+            backup_path=backup_path,
+            site_id=manifest.site_id,
+            backup_filename=backup_path.name,
+        )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(snapshot, f, sort_keys=False)
+
+        click.echo(f"OK Ingested backup: {backup_path}")
+        click.echo(f"OK Wrote discovery snapshot: {output_path}")
+        click.echo(f"  Devices: {snapshot['counts']['devices']}")
+        click.echo(f"  Entities: {snapshot['counts']['entities']}")
+        click.echo(f"  Config entries: {snapshot['counts']['config_entries']}")
+    except Exception as e:
+        click.echo(f"Ingest failed: {e}", err=True)
+        raise click.exceptions.Exit(1)

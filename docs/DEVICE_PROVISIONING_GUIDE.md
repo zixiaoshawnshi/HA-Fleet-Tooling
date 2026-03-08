@@ -196,6 +196,37 @@ regressions before pushing changes.
 The subsequent sections describe uploading the artifacts or running a restore
 on an edge device once you’re satisfied with your configuration.
 
+### Optional: Ingest Edge Discovery From Backup (Operator Stop-Gap)
+
+If edge has newly onboarded hardware and you want operator-side visibility
+without running scripts on the device, ingest a backup artifact:
+
+```bash
+# 1) produce or fetch a backup from the edge device into local filesystem
+#    (example path shown below)
+
+# 2) ingest discovery data from the backup
+../ha-fleet-tooling/.venv/Scripts/ha-fleet ingest-backup \
+    --site-path ./sites/site_001 \
+    --backup ./build/site_001_backup_from_edge.tar.gz \
+    --output ./sites/site_001/discovery/latest.yaml
+```
+
+What this does:
+- Reads HA registry files from the backup archive:
+  - `.storage/core.device_registry`
+  - `.storage/core.entity_registry`
+  - `.storage/core.config_entries`
+- Writes a sanitized snapshot for review at:
+  - `sites/site_001/discovery/latest.yaml`
+
+Suggested workflow:
+1. Edge operator onboards hardware in HA UI (edge is hardware source of truth).
+2. Edge produces backup.
+3. Operator ingests backup and reviews `discovery/latest.yaml`.
+4. Operator updates fleet config (`site_manifest`, bundles, dashboards) via PR.
+5. Deploy approved config back to edge.
+
 ## 7. Canary Restore Test (Manual)
 
 1. Upload backup artifact to the edge device (method of choice).

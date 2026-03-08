@@ -16,6 +16,9 @@ ha-fleet bundle-to-backup --site-path ./sites/site_001 --output ./backup.tar.gz
 
 # Show what changed (not implemented yet)
 ha-fleet diff --site-path ./sites/site_001
+
+# Ingest discovery snapshot from an edge backup
+ha-fleet ingest-backup --site-path ./sites/site_001 --backup ./site_001_backup.tar.gz
 ```
 
 ## Current Scope
@@ -26,7 +29,8 @@ Implemented:
 - Rendering for `automations`, `scripts`, and `input_booleans`
 - Rendering for YAML dashboards (`dashboards/*.yaml` + `overlays/dashboards/*.yaml`)
 - Backup artifact generation
-- CLI commands: `validate`, `render`, `bundle-to-backup`
+- Backup ingestion for operator-side discovery snapshots
+- CLI commands: `validate`, `render`, `bundle-to-backup`, `ingest-backup`
 
 Not implemented yet:
 - Real `diff` behavior
@@ -73,6 +77,18 @@ ha-fleet diff --site-path ./sites/site_001 --from-version v1.2.3
 
 Currently returns "not implemented yet" and exits non-zero.
 
+### ingest-backup
+
+```bash
+ha-fleet ingest-backup \
+  --site-path ./sites/site_001 \
+  --backup ./build/site_001_backup.tar.gz \
+  --output ./sites/site_001/discovery/latest.yaml
+```
+
+Reads HA registry files from backup archives and writes a sanitized discovery
+snapshot for operator review.
+
 ## Development
 
 ```bash
@@ -98,6 +114,7 @@ ha-fleet-tooling/
     backup/
     bundles/
     cli/
+    discovery/
     deploy/
     render/
     schemas/
