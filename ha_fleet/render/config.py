@@ -1,10 +1,10 @@
 """Configuration rendering engine for HAOS config generation."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import yaml
 import json
-from jinja2 import Environment, FileSystemLoader, Template
+from jinja2 import Environment, FileSystemLoader
 from ha_fleet.schemas.site import SiteManifest
 
 
@@ -32,7 +32,9 @@ class ConfigRenderer:
 
     def load_bundle(self, bundle_name: str) -> Dict[str, Any]:
         """Load bundle definition from YAML."""
-        bundle_file = self.bundles_path / f"{bundle_name}.yaml"
+        bundle_file = self.bundles_path / bundle_name / "bundle.yaml"
+        if not bundle_file.exists():
+            bundle_file = self.bundles_path / f"{bundle_name}.yaml"
         if not bundle_file.exists():
             raise FileNotFoundError(f"Bundle not found: {bundle_file}")
 
@@ -90,7 +92,6 @@ class ConfigRenderer:
         automations = []
 
         for bundle_name in self.manifest.bundles:
-            bundle = self.load_bundle(bundle_name)
             # Load bundle automations if they exist
             bundle_auto_file = self.bundles_path / bundle_name / "automations.yaml"
             if bundle_auto_file.exists():

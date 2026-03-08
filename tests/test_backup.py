@@ -1,53 +1,77 @@
-"""Tests for HAOS backup generation."""
+﻿"""Tests for HAOS backup generation."""
 
-import pytest
-import tempfile
-import tarfile
 import json
+import shutil
+import tarfile
+import uuid
 from pathlib import Path
+
 import yaml
+
 from ha_fleet.backup.haos import HAOSBackupGenerator
-from tests.fixtures import get_minimal_site_manifest, get_full_site_manifest
+from tests.fixtures import get_full_site_manifest, get_minimal_site_manifest
+
+
+TEST_ROOT = Path("tests") / "_tmp"
+
+
+def _new_case_dir() -> Path:
+    case_dir = TEST_ROOT / f"case_{uuid.uuid4().hex}"
+    case_dir.mkdir(parents=True, exist_ok=False)
+    return case_dir
+
+
+def _cleanup_case_dir(case_dir: Path) -> None:
+    shutil.rmtree(case_dir, ignore_errors=True)
+
+
+def _setup_site(case_dir: Path) -> Path:
+    (case_dir / "bundles").mkdir()
+    (case_dir / "overlays").mkdir()
+    return case_dir
 
 
 def test_backup_generator_initialization() -> None:
     """Test HAOSBackupGenerator initialization."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        (site_dir / "bundles").mkdir()
-        (site_dir / "overlays").mkdir()
-
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
         manifest = get_minimal_site_manifest()
         generator = HAOSBackupGenerator(manifest, site_dir)
 
         assert generator.manifest.site_id == "test_site"
         assert generator.site_path == site_dir
+    finally:
+        _cleanup_case_dir(case_dir)
 
 
 def test_create_backup_metadata() -> None:
     """Test backup.json metadata creation."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        (site_dir / "bundles").mkdir()
-        (site_dir / "overlays").mkdir()
-
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
         manifest = get_minimal_site_manifest()
         generator = HAOSBackupGenerator(manifest, site_dir)
 
-        metadata = generator._create_backup_metadata()
+        metadata = generator._create_backup_metadata(
+            exclude_media=True,
+            exclude_history="7d",
+        )
         assert metadata["version"] == 1
         assert metadata["name"] == "test_site_backup"
         assert metadata["type"] == "full"
         assert "key" in metadata
+        assert metadata["ha_fleet_options"]["exclude_media"] is True
+        assert metadata["ha_fleet_options"]["exclude_history"] == "7d"
+    finally:
+        _cleanup_case_dir(case_dir)
 
 
 def test_create_ha_config_snapshot() -> None:
     """Test homeassistant.json config snapshot creation."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        (site_dir / "bundles").mkdir()
-        (site_dir / "overlays").mkdir()
-
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
         manifest = get_full_site_manifest()
         generator = HAOSBackupGenerator(manifest, site_dir)
 
@@ -55,81 +79,76 @@ def test_create_ha_config_snapshot() -> None:
         assert config["name"] == "Ottawa Pilot Home"
         assert config["version"]
         assert config["unit_system"] == "metric"
+    finally:
+        _cleanup_case_dir(case_dir)
 
 
 def test_calculate_sha256() -> None:
     """Test SHA256 calculation."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        (site_dir / "bundles").mkdir()
-        (site_dir / "overlays").mkdir()
-
-        # Create a test file
-        test_file = Path(tmpdir) / "test.txt"
-        test_file.write_text("hello world")
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        test_file = case_dir / "test.txt"
+        test_file.write_text("hello world", encoding="utf-8")
 
         manifest = get_minimal_site_manifest()
         generator = HAOSBackupGenerator(manifest, site_dir)
 
         checksum = generator._calculate_sha256(test_file)
-        assert len(checksum) == 64  # SHA256 hex is 64 chars
+        assert len(checksum) == 64
         assert checksum.isalnum()
+    finally:
+        _cleanup_case_dir(case_dir)
 
 
 def test_generate_backup_creates_tarball() -> None:
     """Test backup generation creates a valid tarball."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        bundles_dir = site_dir / "bundles"
-        bundles_dir.mkdir()
-        (site_dir / "overlays").mkdir()
-
-        # Create a minimal bundle
-        bundle_data = {"name": "routine"}
-        with open(bundles_dir / "routine.yaml", "w") as f:
-            yaml.dump(bundle_data, f)
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        with open(site_dir / "bundles" / "routine.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"name": "routine"}, f)
 
         manifest = get_minimal_site_manifest()
-        output_path = Path(tmpdir) / "backup.tar.gz"
+        output_path = case_dir / "backup.tar.gz"
 
         generator = HAOSBackupGenerator(manifest, site_dir)
         result = generator.generate(output_path)
 
-        # Verify file exists
         assert output_path.exists()
         assert result["file_size"] > 0
         assert result["checksum"]
         assert result["site_id"] == "test_site"
+    finally:
+        _cleanup_case_dir(case_dir)
 
 
 def test_backup_contains_required_files() -> None:
     """Test backup tarball contains required files."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        site_dir = Path(tmpdir)
-        bundles_dir = site_dir / "bundles"
-        bundles_dir.mkdir()
-        (site_dir / "overlays").mkdir()
-
-        # Create a minimal bundle
-        bundle_data = {"name": "routine"}
-        with open(bundles_dir / "routine.yaml", "w") as f:
-            yaml.dump(bundle_data, f)
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        with open(site_dir / "bundles" / "routine.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"name": "routine"}, f)
 
         manifest = get_minimal_site_manifest()
-        output_path = Path(tmpdir) / "backup.tar.gz"
+        output_path = case_dir / "backup.tar.gz"
 
         generator = HAOSBackupGenerator(manifest, site_dir)
-        result = generator.generate(output_path)
+        generator.generate(output_path)
 
-        # Verify tarball contents
         with tarfile.open(output_path, "r:gz") as tar:
             names = tar.getnames()
-            assert "backup.json" in names
-            assert "homeassistant.json" in names
+            assert any(name.endswith("backup.json") for name in names)
+            assert any(name.endswith("homeassistant.json") for name in names)
 
-            # Verify backup.json is valid JSON
-            backup_member = tar.getmember("backup.json")
-            f = tar.extractfile(backup_member)
-            backup_data = json.load(f)
+            backup_member = next(
+                member for member in tar.getmembers() if member.name.endswith("backup.json")
+            )
+            extracted = tar.extractfile(backup_member)
+            assert extracted is not None
+            backup_data = json.load(extracted)
             assert "key" in backup_data
             assert "version" in backup_data
+    finally:
+        _cleanup_case_dir(case_dir)

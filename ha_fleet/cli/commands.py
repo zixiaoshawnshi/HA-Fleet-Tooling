@@ -1,13 +1,44 @@
-"""CLI commands for ha-fleet."""
+﻿"""CLI commands for ha-fleet."""
+
+from pathlib import Path
+from typing import Optional
 
 import click
 import yaml
-import json
-from pathlib import Path
-from typing import Optional
-from ha_fleet.schemas.site import SiteManifest
-from ha_fleet.render.config import ConfigRenderer
+
 from ha_fleet.backup.haos import HAOSBackupGenerator
+from ha_fleet.bundles.engine import BundleEngine
+from ha_fleet.render.config import ConfigRenderer
+from ha_fleet.schemas.bundle import BundleDefinition
+from ha_fleet.schemas.site import SiteManifest
+
+
+def _load_manifest(site_dir: Path) -> SiteManifest:
+    """Load and validate site manifest."""
+    manifest_path = site_dir / "site_manifest.yaml"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"site_manifest.yaml not found in {site_dir}")
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest_data = yaml.safe_load(f)
+    return SiteManifest(**manifest_data)
+
+
+def _load_bundle_definition(site_dir: Path, bundle_name: str) -> BundleDefinition:
+    """Load bundle definition from supported paths."""
+    bundle_file = site_dir / "bundles" / bundle_name / "bundle.yaml"
+    if not bundle_file.exists():
+        bundle_file = site_dir / "bundles" / f"{bundle_name}.yaml"
+    if not bundle_file.exists():
+        raise FileNotFoundError(
+            f"Bundle definition not found for '{bundle_name}' "
+            f"(expected bundles/{bundle_name}/bundle.yaml or bundles/{bundle_name}.yaml)"
+        )
+
+    with open(bundle_file, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    data.setdefault("name", bundle_name)
+    return BundleDefinition(**data)
 
 
 @click.command()
@@ -21,25 +52,59 @@ from ha_fleet.backup.haos import HAOSBackupGenerator
 def validate(site_path: str, strict: bool) -> None:
     """Validate site manifest and bundle compatibility."""
     site_dir = Path(site_path)
-    manifest_path = site_dir / "site_manifest.yaml"
-
-    if not manifest_path.exists():
-        click.echo(f"Error: site_manifest.yaml not found in {site_path}", err=True)
-        raise click.Exit(1)
 
     try:
-        with open(manifest_path, "r") as f:
-            manifest_data = yaml.safe_load(f)
-        manifest = SiteManifest(**manifest_data)
-        click.echo(f"✓ Manifest schema valid")
+        manifest = _load_manifest(site_dir)
+        click.echo("OK Manifest schema valid")
         click.echo(f"  Site: {manifest.display_name} ({manifest.site_id})")
         click.echo(f"  Bundles: {', '.join(manifest.bundles)}")
         click.echo(f"  Required secrets: {len(manifest.required_secrets)}")
         click.echo(f"  Required entities: {len(manifest.required_entities)}")
-        click.echo(f"✓ Validation passed!")
+
+        engine = BundleEngine()
+        load_warnings: list[str] = []
+
+        for bundle_name in manifest.bundles:
+            try:
+                definition = _load_bundle_definition(site_dir, bundle_name)
+                engine.load_bundle(definition)
+            except Exception as exc:
+                load_warnings.append(str(exc))
+
+        is_valid, composition_warnings = engine.validate_composition(manifest.bundles)
+
+        capability_warnings: list[str] = []
+        for bundle_name in manifest.bundles:
+            definition = engine.bundles.get(bundle_name)
+            if not definition:
+                continue
+            for cap_name, required_state in definition.requires_capabilities.items():
+                actual_state = getattr(manifest.capabilities, cap_name, None)
+                if actual_state is None:
+                    capability_warnings.append(
+                        f"Bundle '{bundle_name}' requires capability '{cap_name}', "
+                        "but it is not defined in manifest capabilities"
+                    )
+                elif actual_state != required_state:
+                    capability_warnings.append(
+                        f"Bundle '{bundle_name}' requires capability '{cap_name}={required_state}', "
+                        f"but manifest has '{cap_name}={actual_state}'"
+                    )
+
+        all_warnings = load_warnings + composition_warnings + capability_warnings
+        if all_warnings:
+            click.echo("Warnings:")
+            for warning in all_warnings:
+                click.echo(f"  - {warning}")
+
+        if strict and (not is_valid or all_warnings):
+            click.echo("Validation failed in strict mode", err=True)
+            raise click.exceptions.Exit(1)
+
+        click.echo("OK Validation passed")
     except Exception as e:
-        click.echo(f"✗ Validation failed: {e}", err=True)
-        raise click.Exit(1)
+        click.echo(f"Validation failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
 
 
 @click.command()
@@ -67,24 +132,19 @@ def render(site_path: str, output: str, format: str) -> None:
     output_dir = Path(output)
 
     try:
-        # Load manifest
-        manifest_path = site_dir / "site_manifest.yaml"
-        with open(manifest_path, "r") as f:
-            manifest_data = yaml.safe_load(f)
-        manifest = SiteManifest(**manifest_data)
+        manifest = _load_manifest(site_dir)
 
-        click.echo(f"✓ Loaded manifest: {manifest.display_name}")
-        click.echo(f"✓ Bundles: {', '.join(manifest.bundles)}")
+        click.echo(f"OK Loaded manifest: {manifest.display_name}")
+        click.echo(f"OK Bundles: {', '.join(manifest.bundles)}")
 
-        # Render config
         renderer = ConfigRenderer(manifest, site_dir)
         renderer.write_to_dir(output_dir, format=format)
 
-        click.echo(f"✓ Rendered to {output_dir}")
+        click.echo(f"OK Rendered to {output_dir}")
 
     except Exception as e:
-        click.echo(f"✗ Render failed: {e}", err=True)
-        raise click.Exit(1)
+        click.echo(f"Render failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
 
 
 @click.command()
@@ -115,27 +175,26 @@ def bundle_to_backup(
     output_path = Path(output)
 
     try:
-        # Load manifest
-        manifest_path = site_dir / "site_manifest.yaml"
-        with open(manifest_path, "r") as f:
-            manifest_data = yaml.safe_load(f)
-        manifest = SiteManifest(**manifest_data)
+        manifest = _load_manifest(site_dir)
 
-        click.echo(f"✓ Loaded manifest: {manifest.display_name}")
-        click.echo(f"✓ Rendering bundles...")
+        click.echo(f"OK Loaded manifest: {manifest.display_name}")
+        click.echo("OK Rendering bundles...")
 
-        # Generate backup
         generator = HAOSBackupGenerator(manifest, site_dir)
-        result = generator.generate(output_path)
+        result = generator.generate(
+            output_path,
+            exclude_media=exclude_media,
+            exclude_history=exclude_history,
+        )
 
-        click.echo(f"✓ Generated backup: {output_path}")
+        click.echo(f"OK Generated backup: {output_path}")
         click.echo(f"  Size: {result['file_size_mb']} MB")
         click.echo(f"  Checksum: {result['checksum']}")
         click.echo(f"  Backup ID: {result['backup_id']}")
 
     except Exception as e:
-        click.echo(f"✗ Backup generation failed: {e}", err=True)
-        raise click.Exit(1)
+        click.echo(f"Backup generation failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
 
 
 @click.command()
@@ -153,7 +212,6 @@ def bundle_to_backup(
 )
 def diff(site_path: str, from_version: Optional[str]) -> None:
     """Show changes since last deployment."""
-    click.echo(f"✓ Comparing {site_path}")
-    click.echo("✓ Changes since last deployment:")
-    click.echo("  - automations.yaml: +5 lines")
-    click.echo("  - scripts.yaml: +2 lines")
+    click.echo("diff is not implemented yet", err=True)
+    click.echo(f"site_path={site_path}, from_version={from_version}", err=True)
+    raise click.exceptions.Exit(2)

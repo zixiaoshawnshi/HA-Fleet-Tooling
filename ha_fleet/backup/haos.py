@@ -27,7 +27,9 @@ class HAOSBackupGenerator:
         self.site_path = site_path
         self.renderer = ConfigRenderer(site_manifest, site_path)
 
-    def _create_backup_metadata(self) -> Dict[str, Any]:
+    def _create_backup_metadata(
+        self, exclude_media: bool, exclude_history: Optional[str]
+    ) -> Dict[str, Any]:
         """Create backup.json metadata."""
         backup_id = str(uuid.uuid4())
         return {
@@ -43,6 +45,10 @@ class HAOSBackupGenerator:
                 "database": False,
                 "addons": [],
                 "folders": ["config"],
+            },
+            "ha_fleet_options": {
+                "exclude_media": exclude_media,
+                "exclude_history": exclude_history,
             },
         }
 
@@ -65,7 +71,12 @@ class HAOSBackupGenerator:
             "default_config": True,
         }
 
-    def generate(self, output_path: Path) -> Dict[str, Any]:
+    def generate(
+        self,
+        output_path: Path,
+        exclude_media: bool = False,
+        exclude_history: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Generate HAOS backup artifact.
 
@@ -94,7 +105,10 @@ class HAOSBackupGenerator:
 
         try:
             # Write backup.json
-            backup_meta = self._create_backup_metadata()
+            backup_meta = self._create_backup_metadata(
+                exclude_media=exclude_media,
+                exclude_history=exclude_history,
+            )
             with open(backup_temp_dir / "backup.json", "w") as f:
                 json.dump(backup_meta, f, indent=2)
 
