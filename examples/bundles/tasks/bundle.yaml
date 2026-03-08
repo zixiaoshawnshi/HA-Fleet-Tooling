@@ -1,0 +1,9 @@
+name: tasks
+version: 1.0.0
+description: Task management and to-do automation
+
+requires_entities:
+  - input_text.task_list
+
+optional_addons:
+  - todo

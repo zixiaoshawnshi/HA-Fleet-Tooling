@@ -1,0 +1,19 @@
+site_id: site_minimal
+display_name: Minimal Test Site
+
+hardware_class: lenovo_tiny
+runtime: haos_bare_metal
+
+bundles:
+  - routine
+
+capabilities:
+  zigbee: false
+  mqtt: false
+  google_calendar: false
+
+required_entities:
+  - input_boolean.startup
+
+required_secrets:
+  - notify_target

@@ -1,0 +1,33 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black ruff mypy
+
+      - name: Format with black
+        run: black --check ha_fleet/ tests/
+
+      - name: Lint with ruff
+        run: ruff check ha_fleet/ tests/
+
+      - name: Type check with mypy
+        run: mypy ha_fleet/

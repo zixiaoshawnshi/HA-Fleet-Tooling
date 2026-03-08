@@ -1,0 +1,20 @@
+# Input helpers for routine bundle
+morning_routine:
+  name: Morning Routine
+  icon: mdi:sunrise
+  initial: "on"
+
+evening_routine:
+  name: Evening Routine
+  icon: mdi:sunset
+  initial: "on"
+
+morning_routine_active:
+  name: Morning Routine Active
+  icon: mdi:timer-play
+  initial: "off"
+
+evening_routine_active:
+  name: Evening Routine Active
+  icon: mdi:timer-play
+  initial: "off"

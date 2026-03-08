@@ -1,0 +1,47 @@
+# Transit and commute automations
+- id: commute_time_alert
+  alias: Commute Time Alert
+  description: Alert if commute time is unusually long
+  trigger:
+    platform: numeric_state
+    entity_id: sensor.commute_time
+    above: 45
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Traffic alert: commute time is {{ states('sensor.commute_time') }} minutes"
+        title: "High Commute Time"
+        data:
+          tag: "commute_alert"
+
+- id: morning_commute_check
+  alias: Morning Commute Check
+  description: Check commute time every morning at 7:30 AM
+  trigger:
+    platform: time
+    at: "07:30:00"
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Current commute time: {{ states('sensor.commute_time') }} minutes"
+        title: "Commute Time"
+        data:
+          tag: "commute_check"
+
+- id: next_bus_notification
+  alias: Next Bus Notification
+  description: Notify about next bus arrival
+  trigger:
+    platform: state
+    entity_id: sensor.bus_eta
+  condition:
+    - condition: numeric_state
+      entity_id: sensor.bus_eta
+      below: 5
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Next bus arriving in {{ states('sensor.bus_eta') }} minutes"
+        title: "Bus Alert"
+        data:
+          tag: "bus_alert"

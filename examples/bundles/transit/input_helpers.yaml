@@ -1,0 +1,28 @@
+# Transit automation helpers
+transit_enabled:
+  name: Transit Automation Enabled
+  icon: mdi:bus
+  initial: "on"
+
+commute_work_address:
+  name: Work Address
+  icon: mdi:office-building
+  unit_of_measurement: ""
+  initial: "123 Main St, Ottawa"
+
+commute_home_address:
+  name: Home Address
+  icon: mdi:home
+  unit_of_measurement: ""
+  initial: ""
+
+commute_prefer_transit:
+  name: Prefer Transit
+  icon: mdi:bus
+  initial: "off"
+
+last_commute_check:
+  name: Last Commute Check
+  icon: mdi:clock
+  unit_of_measurement: ""
+  initial: ""

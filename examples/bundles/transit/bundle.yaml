@@ -1,0 +1,13 @@
+name: transit
+version: 1.0.0
+description: Transit and commute information automation
+
+requires_secrets:
+  - google_maps_api_key
+
+requires_entities:
+  - sensor.commute_time
+
+optional_entities:
+  - sensor.bus_eta
+  - sensor.next_transit_arrival

@@ -1,0 +1,24 @@
+"""Example routine bundle."""
+
+name: routine
+version: 1.0.0
+description: Morning and evening routines with automations and scripts
+
+requires_secrets:
+  - notify_mobile_target
+
+requires_entities:
+  - input_boolean.morning_routine
+  - input_boolean.evening_routine
+
+optional_entities:
+  - calendar.google_calendar
+
+optional_addons:
+  - google_calendar
+
+# Config files would be stored alongside this in the bundle directory
+# - automations/morning_routine.yaml
+# - automations/evening_routine.yaml
+# - scripts/morning_setup.yaml
+# - input_booleans.yaml

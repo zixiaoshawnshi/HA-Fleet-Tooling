@@ -1,0 +1,41 @@
+# Task management automations
+- id: daily_task_reminder
+  alias: Daily Task Reminder
+  description: Remind about daily tasks at 9 AM
+  trigger:
+    platform: time
+    at: "09:00:00"
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Time to check your task list"
+        title: "Daily Task Reminder"
+        data:
+          tag: "task_reminder"
+
+- id: task_completed_notification
+  alias: Task Completed Notification
+  description: Get notification when task is marked complete
+  trigger:
+    platform: state
+    entity_id: input_text.task_list
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Task updated"
+        title: "Task List"
+
+- id: weekly_task_review
+  alias: Weekly Task Review
+  description: Weekly task review reminder every Sunday
+  trigger:
+    platform: time
+    at: "10:00:00"
+  condition:
+    - condition: time
+      weekday: "sun"
+  action:
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Time for weekly task review"
+        title: "Weekly Review"

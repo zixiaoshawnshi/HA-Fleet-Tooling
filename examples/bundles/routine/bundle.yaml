@@ -1,0 +1,16 @@
+name: routine
+version: 1.0.0
+description: Morning and evening routines with automations and scripts
+
+requires_secrets:
+  - notify_mobile_target
+
+requires_entities:
+  - input_boolean.morning_routine
+  - input_boolean.evening_routine
+
+optional_entities:
+  - calendar.google_calendar
+
+optional_addons:
+  - google_calendar

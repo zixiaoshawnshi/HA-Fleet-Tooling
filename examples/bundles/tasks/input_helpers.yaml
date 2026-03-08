@@ -1,0 +1,31 @@
+# Task management helpers
+task_list:
+  name: Task List
+  icon: mdi:format-list-checkbox
+  unit_of_measurement: ""
+  initial: ""
+
+task_priority:
+  name: Task Priority
+  options:
+    - Low
+    - Medium
+    - High
+  icon: mdi:priority-high
+  initial: "Medium"
+
+task_category:
+  name: Task Category
+  options:
+    - Work
+    - Personal
+    - Health
+    - Finance
+    - Other
+  icon: mdi:tag
+  initial: "Personal"
+
+weekly_review_done:
+  name: Weekly Review Done
+  icon: mdi:checkbox-marked-circle
+  initial: "off"

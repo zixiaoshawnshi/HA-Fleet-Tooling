@@ -1,0 +1,34 @@
+# Morning and evening routine automations
+- id: morning_routine_start
+  alias: Morning Routine Start
+  description: Trigger morning routine at 7 AM on weekdays
+  trigger:
+    platform: time
+    at: "07:00:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.morning_routine
+      state: "on"
+  action:
+    - service: script.morning_setup
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Good morning! Starting your routine."
+        title: "Morning Routine"
+
+- id: evening_routine_start
+  alias: Evening Routine Start
+  description: Trigger evening routine at 9 PM
+  trigger:
+    platform: time
+    at: "21:00:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.evening_routine
+      state: "on"
+  action:
+    - service: script.evening_setup
+    - service: notify.mobile_app_{{ notify_mobile_target | default('phone') }}
+      data:
+        message: "Evening routine started. Good night!"
+        title: "Evening Routine"
