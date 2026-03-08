@@ -75,10 +75,10 @@ def validate(site_path: str, strict: bool) -> None:
 
         capability_warnings: list[str] = []
         for bundle_name in manifest.bundles:
-            definition = engine.bundles.get(bundle_name)
-            if not definition:
+            bundle_def = engine.bundles.get(bundle_name)
+            if not bundle_def:
                 continue
-            for cap_name, required_state in definition.requires_capabilities.items():
+            for cap_name, required_state in bundle_def.requires_capabilities.items():
                 actual_state = getattr(manifest.capabilities, cap_name, None)
                 if actual_state is None:
                     capability_warnings.append(

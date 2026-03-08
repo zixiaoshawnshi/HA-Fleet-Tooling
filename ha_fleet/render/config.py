@@ -1,7 +1,7 @@
 """Configuration rendering engine for HAOS config generation."""
 
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, cast
 import yaml
 import json
 from jinja2 import Environment, FileSystemLoader
@@ -68,11 +68,12 @@ class ConfigRenderer:
             template_str = f.read()
 
         template = self.jinja_env.from_string(template_str)
-        return template.render(
+        rendered = template.render(
             manifest=self.manifest,
             site=self.manifest,
             **context,
         )
+        return cast(str, rendered)
 
     def _merge_yaml_dicts(self, base: Dict, override: Dict) -> Dict:
         """Deep merge YAML dicts (override extends base)."""
@@ -85,7 +86,7 @@ class ConfigRenderer:
 
     def render_automations(self) -> List[Dict[str, Any]]:
         """Render automations from bundles + overlays."""
-        automations = []
+        automations: List[Dict[str, Any]] = []
 
         for bundle_name in self.manifest.bundles:
             # Load bundle automations if they exist
@@ -103,7 +104,7 @@ class ConfigRenderer:
 
     def render_scripts(self) -> Dict[str, Any]:
         """Render scripts from bundles + overlays."""
-        scripts = {}
+        scripts: Dict[str, Any] = {}
 
         for bundle_name in self.manifest.bundles:
             bundle_script_file = self.bundles_path / bundle_name / "scripts.yaml"
@@ -123,7 +124,7 @@ class ConfigRenderer:
 
     def render_input_booleans(self) -> Dict[str, Any]:
         """Render input booleans (helpers) from bundles."""
-        input_booleans = {}
+        input_booleans: Dict[str, Any] = {}
 
         for bundle_name in self.manifest.bundles:
             bundle_ib_file = self.bundles_path / bundle_name / "input_booleans.yaml"
