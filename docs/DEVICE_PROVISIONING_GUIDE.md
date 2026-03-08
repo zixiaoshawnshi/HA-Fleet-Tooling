@@ -61,6 +61,11 @@ Recommended:
 Expected result:
 - Device is reachable over tailnet.
 
+> **Note:** Tailscale caches the hostname at startup. If you change the system
+> hostname (via SSH or the HA UI) the add-on will continue advertising the old
+> name until the Tailscale daemon is restarted or the device is rejoined. See
+> the troubleshooting section below for force‑refresh instructions.
+
 ## 5. Provision Site Secrets On Edge
 
 Use the site contract as source of truth:
@@ -80,18 +85,82 @@ Important:
 
 ## 6. Validate Site Config Locally (Operator Machine)
 
+Before touching any edge device you can fully test your configuration on your
+operator workstation. The CLI commands perform exactly the same schema
+validation and rendering that will run on the device, so you do **not** need to
+create a backup every time – that step is only required when you're ready to
+upload an artifact to an edge.
+
 From `ha-fleet-pilot-sites`:
 
 ```bash
-../ha-fleet-tooling/.venv/Scripts/ha-fleet validate --site-path ./sites/site_001 --strict
-../ha-fleet-tooling/.venv/Scripts/ha-fleet render --site-path ./sites/site_001 --output ./build/site_001
-../ha-fleet-tooling/.venv/Scripts/ha-fleet bundle-to-backup --site-path ./sites/site_001 --output ./build/site_001_backup.tar.gz
+# check that the manifest, bundles, and overlays are all valid
+../ha-fleet-tooling/.venv/Scripts/ha-fleet validate \
+    --site-path ./sites/site_001 --strict
+
+# render the composed bundles/overlays into concrete YAML for inspection
+../ha-fleet-tooling/.venv/Scripts/ha-fleet render \
+    --site-path ./sites/site_001 --output ./build/site_001
+
+# (optional) create the backup tarball for a dry‑run or to preview what will
+# be applied on the device; not required for validation
+../ha-fleet-tooling/.venv/Scripts/ha-fleet bundle-to-backup \
+    --site-path ./sites/site_001 --output ./build/site_001_backup.tar.gz
 ```
 
-Expected result:
-- Validate exits 0
-- Render outputs YAML files
-- Backup artifact generated successfully
+Expected local results:
+- `validate` exits 0 (or prints errors/warnings when things are wrong)
+- `render` populates `./build/site_001` with all generated YAML files
+- The backup command may be run if you want to inspect the archive, but you
+  can skip it during early editing cycles
+
+### Previewing the rendered configuration
+
+If you want to **see what the configuration actually looks like in Home
+Assistant (dashboards, entities, automations, etc.)** without touching an
+edge device, run a local HA instance and point it at the build output.
+
+A simple way to do this is with Docker:
+
+```bash
+# from inside ha-fleet-pilot-sites root
+build_dir=./build/site_001
+mkdir -p "$build_dir"
+# (re-run render when you make changes)
+
+# spin up a temporary HAOS container using the rendered config
+docker run --rm -it \
+    -v "$PWD/$build_dir:/config" \
+    -p 8123:8123 \
+    ghcr.io/home-assistant/operating-system-aarch64:latest
+```
+
+Once the container starts you can open `http://localhost:8123` in your browser
+and the UI will reflect the rendered YAML. This is much faster than installing
+a new device and creates an iterative feedback loop for dashboards or other
+UI elements.
+
+*You could also use a vanilla Home Assistant Core container* (not HAOS) by
+testing only the relevant parts of the config (e.g. copying automations,
+lovelace resources, etc.), but the OS-based image avoids compatibility issues.
+
+#### Tips for dashboard iteration
+
+1. Run `ha-fleet render` after each change, the contents of the container
+   will update on next restart or when you manually reload config via the HA
+   UI.
+2. Use the **Lovelace raw config editor** (`Settings → Dashboards → Edit`) to
+   preview modifications without re-deploying anything; the underlying YAML
+   in `/config` reflects what the tooling generated.
+3. You can mount only the packages subdirectory or individual files if you
+   want to mix rendered and hand‑crafted config.
+
+Tip: add a short `pytest` test in `ha-fleet-pilot-sites/tests/` that runs
+`ha-fleet validate` against your site directory; this lets you catch
+regressions before pushing changes.
+
+The subsequent sections describe uploading the artifacts or running a restore
+on an edge device once you’re satisfied with your configuration.
 
 ## 7. Canary Restore Test (Manual)
 
@@ -133,6 +202,19 @@ Pilot requirement:
 - Add-on not running:
   - Symptom: entity load failures
   - Fix: check add-on logs and restart add-on
+- Tailscale still showing old hostname after renaming:
+  - Symptom: `tailscale status` continues to list the previous name even
+    after system hostname change and reboot.
+  - Fix: restart or reconfigure the Tailscale daemon. E.g.:  
+    ```bash
+    # via SSH on HAOS
+    tailscale down
+    tailscale up --hostname "new-name" --force-reauth
+    # or simply restart the add-on from the Supervisor UI
+    ```
+    A full reboot also re-joins with the updated hostname.
+
+
 
 ## 11. Next Step After Provisioning
 

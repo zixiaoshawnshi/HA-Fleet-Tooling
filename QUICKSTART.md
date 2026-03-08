@@ -4,19 +4,30 @@ This folder contains the `ha-fleet-tooling` public package for HA Fleet manageme
 
 ## Setup (Local Development)
 
+### Prerequisites
+
+- **Python 3.10+** (required by project dependencies)
+  - Check your version: `python --version`
+  - If you have Python 3.8 or earlier, you'll need to install a newer version
+  - [Download Python](https://www.python.org/downloads/) or use your system package manager
+
 ### 1. Create Python Environment
 
 ```bash
 cd ha-fleet-tooling
 
-# Using venv
+# Using venv (ensure you're using Python 3.10+)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Or using conda
+# Or using conda (recommended if managing multiple Python versions)
 conda create -n ha-fleet python=3.12
 conda activate ha-fleet
 ```
+
+**Troubleshooting:** If you have multiple Python versions installed:
+- Windows: Use the specific version path, e.g., `py -3.12 -m venv venv`
+- Linux/macOS: Use `python3.12 -m venv venv`
 
 ### 2. Install Package in Dev Mode
 
