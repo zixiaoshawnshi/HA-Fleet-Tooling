@@ -10,7 +10,6 @@ import yaml
 from ha_fleet.render.config import ConfigRenderer
 from tests.fixtures import get_minimal_site_manifest
 
-
 TEST_ROOT = Path("tests") / "_tmp"
 
 

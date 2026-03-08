@@ -11,7 +11,6 @@ import yaml
 from ha_fleet.backup.haos import HAOSBackupGenerator
 from tests.fixtures import get_full_site_manifest, get_minimal_site_manifest
 
-
 TEST_ROOT = Path("tests") / "_tmp"
 
 

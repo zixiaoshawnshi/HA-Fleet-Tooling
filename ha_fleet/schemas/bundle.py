@@ -12,9 +12,7 @@ class BundleDefinition(BaseModel):
     description: Optional[str] = None
     requires: List[str] = Field(default_factory=list, description="Required bundles")
     conflicts: List[str] = Field(default_factory=list, description="Conflicting bundles")
-    requires_secrets: List[str] = Field(
-        default_factory=list, description="Required secrets"
-    )
+    requires_secrets: List[str] = Field(default_factory=list, description="Required secrets")
     requires_entities: List[str] = Field(default_factory=list)
     optional_entities: List[str] = Field(default_factory=list)
     requires_addons: List[str] = Field(default_factory=list)

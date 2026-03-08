@@ -52,9 +52,7 @@ class HAOSBackupGenerator:
             },
         }
 
-    def _create_ha_config_snapshot(
-        self, rendered_config: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _create_ha_config_snapshot(self, rendered_config: Dict[str, Any]) -> Dict[str, Any]:
         """Create homeassistant.json config snapshot."""
         return {
             "version": "2024.1.0",  # HAOS version

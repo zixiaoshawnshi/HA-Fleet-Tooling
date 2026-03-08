@@ -33,9 +33,7 @@ class BundleEngine:
             bundle = self.bundles[bundle_name]
             for conflict in bundle.conflicts:
                 if conflict in bundle_names:
-                    warnings.append(
-                        f"Bundle '{bundle_name}' conflicts with '{conflict}'"
-                    )
+                    warnings.append(f"Bundle '{bundle_name}' conflicts with '{conflict}'")
 
         # Check for missing requirements
         for bundle_name in bundle_names:
@@ -45,8 +43,6 @@ class BundleEngine:
             bundle = self.bundles[bundle_name]
             for req in bundle.requires:
                 if req not in bundle_names:
-                    warnings.append(
-                        f"Bundle '{bundle_name}' requires '{req}' (missing)"
-                    )
+                    warnings.append(f"Bundle '{bundle_name}' requires '{req}' (missing)")
 
         return len(warnings) == 0, warnings

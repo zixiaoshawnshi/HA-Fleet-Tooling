@@ -1,6 +1,6 @@
 """Site manifest schema."""
 
-from typing import List, Optional, Dict
+from typing import List
 from pydantic import BaseModel, Field
 
 

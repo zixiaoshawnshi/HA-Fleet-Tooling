@@ -1,6 +1,5 @@
 """Tests for bundle engine."""
 
-import pytest
 from ha_fleet.bundles.engine import BundleEngine
 from ha_fleet.schemas.bundle import BundleDefinition
 

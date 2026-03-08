@@ -9,7 +9,6 @@ from click.testing import CliRunner
 
 from ha_fleet.cli.commands import bundle_to_backup, diff, validate
 
-
 TEST_ROOT = Path("tests") / "_tmp"
 
 

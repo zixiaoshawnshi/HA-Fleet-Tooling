@@ -26,9 +26,7 @@ def get_full_site_manifest() -> SiteManifest:
         hardware_class="lenovo_tiny",
         runtime="haos_bare_metal",
         bundles=["routine", "tasks", "transit"],
-        capabilities=Capability(
-            zigbee=True, mqtt=True, google_calendar=True
-        ),
+        capabilities=Capability(zigbee=True, mqtt=True, google_calendar=True),
         addons=["zigbee2mqtt", "mosquitto", "google_calendar"],
         required_entities=[
             "input_boolean.morning_routine",

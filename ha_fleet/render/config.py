@@ -26,9 +26,7 @@ class ConfigRenderer:
         self.output_config: Dict[str, Any] = {}
 
         # Setup Jinja2 environment
-        self.jinja_env = Environment(
-            loader=FileSystemLoader(str(site_path)), trim_blocks=True
-        )
+        self.jinja_env = Environment(loader=FileSystemLoader(str(site_path)), trim_blocks=True)
 
     def load_bundle(self, bundle_name: str) -> Dict[str, Any]:
         """Load bundle definition from YAML."""
@@ -50,9 +48,7 @@ class ConfigRenderer:
         with open(overlay_file, "r") as f:
             return yaml.safe_load(f) or {}
 
-    def render_config_file(
-        self, template_dir: str, filename: str, context: Dict[str, Any]
-    ) -> str:
+    def render_config_file(self, template_dir: str, filename: str, context: Dict[str, Any]) -> str:
         """
         Render a config file using Jinja2.
 
