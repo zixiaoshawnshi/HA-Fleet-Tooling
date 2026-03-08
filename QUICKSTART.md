@@ -90,13 +90,17 @@ mypy ha_fleet/
   - `BundleDefinition` — bundle metadata
   - `SecretsContract` — secret requirements
 - Bundle engine (loading, validation, composition)
+- Render engine for:
+  - `automations.yaml`
+  - `scripts.yaml`
+  - `input_booleans.yaml`
+  - `dashboards/*.yaml`
+- Backup generation
 - Unit tests (schemas, bundle engine)
 - CI/CD workflows (test.yml, lint.yml)
 - Examples (minimal site, bundle definitions)
 
 ⏳ **TODO (Next Steps):**
-- Implement render engine (YAML template generation)
-- Implement backup generation (HAOS tarball format)
 - Implement diff logic (git-based change detection)
 - Add more comprehensive tests
 - Add documentation (bundle guide, secrets strategy, etc.)

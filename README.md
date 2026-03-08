@@ -24,6 +24,7 @@ Implemented:
 - Bundle composition and validation primitives
 - Site manifest / bundle / secrets schemas
 - Rendering for `automations`, `scripts`, and `input_booleans`
+- Rendering for YAML dashboards (`dashboards/*.yaml` + `overlays/dashboards/*.yaml`)
 - Backup artifact generation
 - CLI commands: `validate`, `render`, `bundle-to-backup`
 

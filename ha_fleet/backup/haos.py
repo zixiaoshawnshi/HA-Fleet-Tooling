@@ -120,8 +120,18 @@ class HAOSBackupGenerator:
                 if not config_data:
                     continue
 
+                if section_name == "dashboards":
+                    dashboards_dir = backup_temp_dir / "dashboards"
+                    dashboards_dir.mkdir(parents=True, exist_ok=True)
+                    for dashboard_rel_path, dashboard_data in config_data.items():
+                        config_file = dashboards_dir / dashboard_rel_path
+                        config_file.parent.mkdir(parents=True, exist_ok=True)
+                        with open(config_file, "w", encoding="utf-8") as f:
+                            yaml.dump(dashboard_data, f, default_flow_style=False)
+                    continue
+
                 config_file = backup_temp_dir / f"{section_name}.yaml"
-                with open(config_file, "w") as f:
+                with open(config_file, "w", encoding="utf-8") as f:
                     yaml.dump(config_data, f, default_flow_style=False)
 
             # Create tar.gz archive

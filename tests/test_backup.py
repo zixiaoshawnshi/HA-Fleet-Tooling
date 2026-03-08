@@ -151,3 +151,26 @@ def test_backup_contains_required_files() -> None:
             assert "version" in backup_data
     finally:
         _cleanup_case_dir(case_dir)
+
+
+def test_backup_includes_dashboard_files_when_present() -> None:
+    """Generated backup should include rendered dashboard YAML files."""
+    case_dir = _new_case_dir()
+    try:
+        (case_dir / "bundles").mkdir()
+        (case_dir / "overlays").mkdir()
+        (case_dir / "dashboards").mkdir()
+        with open(case_dir / "dashboards" / "ui-lovelace.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"title": "Test Dashboard"}, f)
+
+        manifest = get_minimal_site_manifest()
+        output_path = case_dir / "backup.tar.gz"
+
+        generator = HAOSBackupGenerator(manifest, case_dir)
+        generator.generate(output_path)
+
+        with tarfile.open(output_path, "r:gz") as tar:
+            names = tar.getnames()
+            assert any(name.endswith("dashboards/ui-lovelace.yaml") for name in names)
+    finally:
+        _cleanup_case_dir(case_dir)

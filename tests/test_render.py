@@ -153,3 +153,55 @@ def test_render_automations_supports_bundle_directory_layout() -> None:
         assert automations[0]["id"] == "test_auto"
     finally:
         _cleanup_case_dir(case_dir)
+
+
+def test_render_dashboards_supports_site_and_overlay_files() -> None:
+    """Dashboards should be loaded from site and overridden by overlay files."""
+    case_dir = _new_case_dir()
+    try:
+        (case_dir / "bundles").mkdir()
+        (case_dir / "overlays" / "dashboards").mkdir(parents=True)
+        (case_dir / "dashboards").mkdir()
+
+        with open(case_dir / "dashboards" / "ui-lovelace.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"title": "Base Dashboard"}, f)
+        with open(case_dir / "dashboards" / "transit.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"title": "Transit Dashboard"}, f)
+        with open(
+            case_dir / "overlays" / "dashboards" / "ui-lovelace.yaml",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            yaml.safe_dump({"title": "Overlay Dashboard"}, f)
+
+        manifest = get_minimal_site_manifest()
+        renderer = ConfigRenderer(manifest, case_dir)
+        dashboards = renderer.render_dashboards()
+
+        assert dashboards["ui-lovelace.yaml"]["title"] == "Overlay Dashboard"
+        assert dashboards["transit.yaml"]["title"] == "Transit Dashboard"
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_write_to_dir_outputs_dashboards_directory() -> None:
+    """Renderer should write dashboard files under output/dashboards."""
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        (site_dir / "dashboards").mkdir()
+        with open(site_dir / "dashboards" / "ui-lovelace.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"title": "Ops Dashboard"}, f)
+
+        output_dir = case_dir / "build"
+        manifest = get_minimal_site_manifest()
+        renderer = ConfigRenderer(manifest, site_dir)
+        renderer.write_to_dir(output_dir)
+
+        output_file = output_dir / "dashboards" / "ui-lovelace.yaml"
+        assert output_file.exists()
+        with open(output_file, "r", encoding="utf-8") as f:
+            rendered_data = yaml.safe_load(f)
+        assert rendered_data["title"] == "Ops Dashboard"
+    finally:
+        _cleanup_case_dir(case_dir)

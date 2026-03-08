@@ -91,6 +91,19 @@ validation and rendering that will run on the device, so you do **not** need to
 create a backup every time – that step is only required when you're ready to
 upload an artifact to an edge.
 
+### Python Environment (Operator)
+
+Use Python `3.10+` for tooling. If Anaconda owns your default `python`, call an
+explicit version via `py`:
+
+```bash
+# from ha-fleet-tooling
+py -3.14 -m venv .venv
+./.venv/Scripts/python -m pip install -e .
+```
+
+### Validate and Render
+
 From `ha-fleet-pilot-sites`:
 
 ```bash
@@ -98,7 +111,7 @@ From `ha-fleet-pilot-sites`:
 ../ha-fleet-tooling/.venv/Scripts/ha-fleet validate \
     --site-path ./sites/site_001 --strict
 
-# render the composed bundles/overlays into concrete YAML for inspection
+# render composed bundles, overlays, and dashboards into concrete YAML
 ../ha-fleet-tooling/.venv/Scripts/ha-fleet render \
     --site-path ./sites/site_001 --output ./build/site_001
 
@@ -110,17 +123,43 @@ From `ha-fleet-pilot-sites`:
 
 Expected local results:
 - `validate` exits 0 (or prints errors/warnings when things are wrong)
-- `render` populates `./build/site_001` with all generated YAML files
+- `render` populates `./build/site_001` with generated YAML, including
+  `./build/site_001/dashboards/*.yaml`
 - The backup command may be run if you want to inspect the archive, but you
   can skip it during early editing cycles
 
-### Previewing the rendered configuration
+### Operator Mock Secrets (Local Only)
+
+To imitate required keys locally, copy the operator example into the rendered
+build directory:
+
+```bash
+cp ./sites/site_001/operator/secrets.local.example.yaml ./build/site_001/secrets.yaml
+```
+
+Notes:
+- This file is for local operator testing only.
+- Never copy production secrets into git.
+- Keep edge `/config/secrets.yaml` managed separately on each device.
+
+### Dashboard Source of Truth Layout
+
+For fleet-managed YAML dashboards, use:
+
+- `sites/site_001/dashboards/*.yaml` for base dashboard YAML
+- `sites/site_001/overlays/dashboards/*.yaml` for site overlay overrides
+
+Renderer behavior:
+- Files are emitted to `build/site_001/dashboards/*.yaml`
+- Overlay files override base dashboard files with the same relative path
+
+### Previewing Rendered Config in Home Assistant
 
 If you want to **see what the configuration actually looks like in Home
 Assistant (dashboards, entities, automations, etc.)** without touching an
 edge device, run a local HA instance and point it at the build output.
 
-A simple way to do this is with Docker:
+A simple way is Home Assistant Core in Docker:
 
 ```bash
 # from inside ha-fleet-pilot-sites root
@@ -128,11 +167,11 @@ build_dir=./build/site_001
 mkdir -p "$build_dir"
 # (re-run render when you make changes)
 
-# spin up a temporary HAOS container using the rendered config
+# spin up a temporary HA Core container using rendered config
 docker run --rm -it \
     -v "$PWD/$build_dir:/config" \
     -p 8123:8123 \
-    ghcr.io/home-assistant/operating-system-aarch64:latest
+    ghcr.io/home-assistant/home-assistant:stable
 ```
 
 Once the container starts you can open `http://localhost:8123` in your browser
@@ -140,18 +179,13 @@ and the UI will reflect the rendered YAML. This is much faster than installing
 a new device and creates an iterative feedback loop for dashboards or other
 UI elements.
 
-*You could also use a vanilla Home Assistant Core container* (not HAOS) by
-testing only the relevant parts of the config (e.g. copying automations,
-lovelace resources, etc.), but the OS-based image avoids compatibility issues.
-
 #### Tips for dashboard iteration
 
 1. Run `ha-fleet render` after each change, the contents of the container
    will update on next restart or when you manually reload config via the HA
    UI.
 2. Use the **Lovelace raw config editor** (`Settings → Dashboards → Edit`) to
-   preview modifications without re-deploying anything; the underlying YAML
-   in `/config` reflects what the tooling generated.
+   inspect and compare generated YAML with what is loaded in the UI.
 3. You can mount only the packages subdirectory or individual files if you
    want to mix rendered and hand‑crafted config.
 

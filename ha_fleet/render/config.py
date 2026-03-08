@@ -141,6 +141,27 @@ class ConfigRenderer:
 
         return input_booleans
 
+    def render_dashboards(self) -> Dict[str, Any]:
+        """Render dashboard YAML files from site and overlay directories."""
+        dashboards: Dict[str, Any] = {}
+        site_dashboards_path = self.site_path / "dashboards"
+        overlay_dashboards_path = self.overlays_path / "dashboards"
+
+        if site_dashboards_path.exists():
+            for dashboard_file in site_dashboards_path.rglob("*.yaml"):
+                rel_path = dashboard_file.relative_to(site_dashboards_path).as_posix()
+                with open(dashboard_file, "r", encoding="utf-8") as f:
+                    dashboards[rel_path] = yaml.safe_load(f) or {}
+
+        # Overlay dashboard files override site dashboard files with same relative path.
+        if overlay_dashboards_path.exists():
+            for dashboard_file in overlay_dashboards_path.rglob("*.yaml"):
+                rel_path = dashboard_file.relative_to(overlay_dashboards_path).as_posix()
+                with open(dashboard_file, "r", encoding="utf-8") as f:
+                    dashboards[rel_path] = yaml.safe_load(f) or {}
+
+        return dashboards
+
     def render_all(self) -> Dict[str, Any]:
         """
         Render all config sections.
@@ -152,6 +173,7 @@ class ConfigRenderer:
             "automations": self.render_automations(),
             "scripts": self.render_scripts(),
             "input_booleans": self.render_input_booleans(),
+            "dashboards": self.render_dashboards(),
         }
         return config
 
@@ -170,13 +192,28 @@ class ConfigRenderer:
             if not config_data:
                 continue
 
+            if section_name == "dashboards":
+                dashboards_dir = output_dir / "dashboards"
+                dashboards_dir.mkdir(parents=True, exist_ok=True)
+                for dashboard_rel_path, dashboard_data in config_data.items():
+                    output_file = dashboards_dir / dashboard_rel_path
+                    output_file.parent.mkdir(parents=True, exist_ok=True)
+                    if format == "yaml":
+                        with open(output_file, "w", encoding="utf-8") as f:
+                            yaml.dump(dashboard_data, f, default_flow_style=False)
+                    elif format == "json":
+                        output_file = output_file.with_suffix(".json")
+                        with open(output_file, "w", encoding="utf-8") as f:
+                            json.dump(dashboard_data, f, indent=2)
+                continue
+
             if format == "yaml":
                 output_file = output_dir / f"{section_name}.yaml"
-                with open(output_file, "w") as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     yaml.dump(config_data, f, default_flow_style=False)
             elif format == "json":
                 output_file = output_dir / f"{section_name}.json"
-                with open(output_file, "w") as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(config_data, f, indent=2)
 
         print(f"Rendered {len(config)} config files to {output_dir}")
