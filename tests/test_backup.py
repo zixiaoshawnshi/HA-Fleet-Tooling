@@ -140,6 +140,7 @@ def test_backup_contains_required_files() -> None:
             names = tar.getnames()
             assert any(name.endswith("backup.json") for name in names)
             assert any(name.endswith("homeassistant.json") for name in names)
+            assert any(name.endswith("configuration.yaml") for name in names)
 
             backup_member = next(
                 member for member in tar.getmembers() if member.name.endswith("backup.json")
@@ -172,5 +173,6 @@ def test_backup_includes_dashboard_files_when_present() -> None:
         with tarfile.open(output_path, "r:gz") as tar:
             names = tar.getnames()
             assert any(name.endswith("dashboards/ui-lovelace.yaml") for name in names)
+            assert any(name.endswith("configuration.yaml") for name in names)
     finally:
         _cleanup_case_dir(case_dir)

@@ -34,6 +34,7 @@ Implemented:
 - Site manifest / bundle / secrets schemas
 - Rendering for `automations`, `scripts`, and `input_booleans`
 - Rendering for YAML dashboards (`dashboards/*.yaml` + `overlays/dashboards/*.yaml`)
+- Auto-generated `configuration.yaml` with `lovelace.dashboards` registrations
 - Backup artifact generation
 - Backup ingestion for operator-side discovery snapshots
 - Site scaffolding and operator dev-loop commands

@@ -162,6 +162,50 @@ class ConfigRenderer:
 
         return dashboards
 
+    def _dashboard_slug(self, rel_path: str) -> str:
+        """Build a stable dashboard key from relative file path."""
+        slug = rel_path.replace("\\", "_").replace("/", "_").replace("-", "_").replace(".", "_")
+        return slug.lower()
+
+    def render_configuration(self, dashboards: Dict[str, Any]) -> str:
+        """Render configuration.yaml text with lovelace dashboard registrations."""
+        lines = [
+            "default_config:",
+            "",
+            "automation: !include automations.yaml",
+            "script: !include scripts.yaml",
+            "input_boolean: !include input_booleans.yaml",
+            "",
+        ]
+
+        if dashboards:
+            lines.extend(
+                [
+                    "lovelace:",
+                    "  mode: storage",
+                    "  dashboards:",
+                ]
+            )
+            for rel_path, dashboard_data in sorted(dashboards.items()):
+                key = f"fleet_{self.manifest.site_id}_{self._dashboard_slug(rel_path)}"
+                title = "Fleet Dashboard"
+                if isinstance(dashboard_data, dict):
+                    maybe_title = dashboard_data.get("title")
+                    if isinstance(maybe_title, str) and maybe_title.strip():
+                        title = maybe_title.strip()
+                lines.extend(
+                    [
+                        f"    {key}:",
+                        "      mode: yaml",
+                        f"      title: {title}",
+                        "      icon: mdi:view-dashboard",
+                        "      show_in_sidebar: true",
+                        "      require_admin: false",
+                        f"      filename: dashboards/{rel_path}",
+                    ]
+                )
+        return "\n".join(lines) + "\n"
+
     def render_all(self) -> Dict[str, Any]:
         """
         Render all config sections.
@@ -169,11 +213,13 @@ class ConfigRenderer:
         Returns:
             Dict with keys: automations, scripts, input_booleans, etc.
         """
+        dashboards = self.render_dashboards()
         config = {
             "automations": self.render_automations(),
             "scripts": self.render_scripts(),
             "input_booleans": self.render_input_booleans(),
-            "dashboards": self.render_dashboards(),
+            "dashboards": dashboards,
+            "configuration": self.render_configuration(dashboards),
         }
         return config
 
@@ -189,10 +235,9 @@ class ConfigRenderer:
         config = self.render_all()
 
         for section_name, config_data in config.items():
-            if not config_data:
-                continue
-
             if section_name == "dashboards":
+                if not config_data:
+                    continue
                 dashboards_dir = output_dir / "dashboards"
                 dashboards_dir.mkdir(parents=True, exist_ok=True)
                 for dashboard_rel_path, dashboard_data in config_data.items():
@@ -205,6 +250,17 @@ class ConfigRenderer:
                         output_file = output_file.with_suffix(".json")
                         with open(output_file, "w", encoding="utf-8") as f:
                             json.dump(dashboard_data, f, indent=2)
+                continue
+
+            if section_name == "configuration":
+                output_file = output_dir / "configuration.yaml"
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(str(config_data))
+                continue
+
+            # Keep these include targets present, even when empty.
+            should_write_empty = section_name in {"automations", "scripts", "input_booleans"}
+            if not config_data and not should_write_empty:
                 continue
 
             if format == "yaml":

@@ -127,6 +127,8 @@ def test_render_all_returns_dict() -> None:
         assert "automations" in config
         assert "scripts" in config
         assert "input_booleans" in config
+        assert "dashboards" in config
+        assert "configuration" in config
     finally:
         _cleanup_case_dir(case_dir)
 
@@ -203,5 +205,12 @@ def test_write_to_dir_outputs_dashboards_directory() -> None:
         with open(output_file, "r", encoding="utf-8") as f:
             rendered_data = yaml.safe_load(f)
         assert rendered_data["title"] == "Ops Dashboard"
+
+        configuration_file = output_dir / "configuration.yaml"
+        assert configuration_file.exists()
+        configuration_text = configuration_file.read_text(encoding="utf-8")
+        assert "lovelace:" in configuration_text
+        assert "dashboards:" in configuration_text
+        assert "filename: dashboards/ui-lovelace.yaml" in configuration_text
     finally:
         _cleanup_case_dir(case_dir)

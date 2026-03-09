@@ -179,6 +179,9 @@ For fleet-managed YAML dashboards, use:
 Renderer behavior:
 - Files are emitted to `build/site_001/dashboards/*.yaml`
 - Overlay files override base dashboard files with the same relative path
+- `build/site_001/configuration.yaml` is auto-generated with a
+  `lovelace.dashboards` block, so dashboards appear in HA without
+  manual config edits
 
 ### Previewing Rendered Config in Home Assistant
 

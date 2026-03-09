@@ -117,10 +117,9 @@ class HAOSBackupGenerator:
 
             # Write config files
             for section_name, config_data in rendered_config.items():
-                if not config_data:
-                    continue
-
                 if section_name == "dashboards":
+                    if not config_data:
+                        continue
                     dashboards_dir = backup_temp_dir / "dashboards"
                     dashboards_dir.mkdir(parents=True, exist_ok=True)
                     for dashboard_rel_path, dashboard_data in config_data.items():
@@ -128,6 +127,16 @@ class HAOSBackupGenerator:
                         config_file.parent.mkdir(parents=True, exist_ok=True)
                         with open(config_file, "w", encoding="utf-8") as f:
                             yaml.dump(dashboard_data, f, default_flow_style=False)
+                    continue
+
+                if section_name == "configuration":
+                    config_file = backup_temp_dir / "configuration.yaml"
+                    with open(config_file, "w", encoding="utf-8") as f:
+                        f.write(str(config_data))
+                    continue
+
+                should_write_empty = section_name in {"automations", "scripts", "input_booleans"}
+                if not config_data and not should_write_empty:
                     continue
 
                 config_file = backup_temp_dir / f"{section_name}.yaml"
