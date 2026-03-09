@@ -128,6 +128,33 @@ Expected local results:
 - The backup command may be run if you want to inspect the archive, but you
   can skip it during early editing cycles
 
+### Create a New Site Scaffold
+
+When onboarding a new home, scaffold a site folder first:
+
+```bash
+# PowerShell
+../ha-fleet-tooling/.venv/Scripts/ha-fleet new-site \
+    --sites-root ./sites \
+    --site-id site_003 \
+    --display-name "Pilot Site 003"
+
+# bash
+../ha-fleet-tooling/.venv/Scripts/ha-fleet new-site \
+    --sites-root ./sites \
+    --site-id site_003 \
+    --display-name "Pilot Site 003"
+```
+
+This creates:
+- `sites/<site_id>/site_manifest.yaml`
+- `sites/<site_id>/secrets_contract.yaml`
+- `sites/<site_id>/bundles/`
+- `sites/<site_id>/dashboards/`
+- `sites/<site_id>/overlays/`
+- `sites/<site_id>/operator/`
+- `sites/<site_id>/discovery/`
+
 ### Operator Mock Secrets (Local Only)
 
 To imitate required keys locally, copy the operator example into the rendered
@@ -159,25 +186,44 @@ If you want to **see what the configuration actually looks like in Home
 Assistant (dashboards, entities, automations, etc.)** without touching an
 edge device, run a local HA instance and point it at the build output.
 
-A simple way is Home Assistant Core in Docker:
+A simple way is the tooling CLI `dev-site` command:
 
 ```bash
 # from inside ha-fleet-pilot-sites root
-build_dir=./build/site_001
-mkdir -p "$build_dir"
-# (re-run render when you make changes)
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action up \
+    --port 8123
 
-# spin up a temporary HA Core container using rendered config
-docker run --rm -it \
-    -v "$PWD/$build_dir:/config" \
-    -p 8123:8123 \
-    ghcr.io/home-assistant/home-assistant:stable
+# re-render only (no container restart)
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action render
+
+# restart container after changes
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action restart
+
+# follow container logs
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action logs
+
+# stop and remove the local dev container
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action down
 ```
 
 Once the container starts you can open `http://localhost:8123` in your browser
 and the UI will reflect the rendered YAML. This is much faster than installing
 a new device and creates an iterative feedback loop for dashboards or other
 UI elements.
+
+This operator workflow is also useful for pre-deployment mockups: you can show
+what dashboards and automations will look like on a laptop before arriving
+onsite, then deploy the same site repo changes to edge once approved.
 
 #### Tips for dashboard iteration
 

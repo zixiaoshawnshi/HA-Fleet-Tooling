@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from ha_fleet.cli.commands import bundle_to_backup, diff, ingest_backup, validate
+from ha_fleet.cli.commands import bundle_to_backup, dev_site, diff, ingest_backup, new_site, validate
 
 TEST_ROOT = Path("tests") / "_tmp"
 
@@ -175,5 +175,71 @@ def test_ingest_backup_writes_snapshot_file() -> None:
         assert snapshot["counts"]["devices"] == 1
         assert snapshot["counts"]["entities"] == 1
         assert snapshot["counts"]["config_entries"] == 1
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_new_site_creates_scaffold() -> None:
+    """new-site should scaffold expected site layout."""
+    case_dir = _new_case_dir()
+    try:
+        sites_root = case_dir / "sites"
+        sites_root.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            new_site,
+            [
+                "--sites-root",
+                str(sites_root),
+                "--site-id",
+                "site_050",
+                "--display-name",
+                "Pilot Site 050",
+            ],
+        )
+
+        assert result.exit_code == 0
+        site_path = sites_root / "site_050"
+        assert (site_path / "site_manifest.yaml").exists()
+        assert (site_path / "secrets_contract.yaml").exists()
+        assert (site_path / "dashboards" / "ui-lovelace.yaml").exists()
+        assert (site_path / "overlays" / "README.md").exists()
+        assert (site_path / "operator" / "secrets.local.example.yaml").exists()
+        assert (site_path / "discovery" / "README.md").exists()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_dev_site_render_creates_build_and_secrets() -> None:
+    """dev-site render should render config and copy operator mock secrets."""
+    case_dir = _new_case_dir()
+    try:
+        site_dir = case_dir / "sites" / "site_070"
+        (site_dir / "bundles").mkdir(parents=True)
+        (site_dir / "overlays").mkdir()
+        (site_dir / "operator").mkdir()
+        _write_manifest(site_dir, bundles=[])
+        (site_dir / "operator" / "secrets.local.example.yaml").write_text(
+            'notify_mobile_target: "operator_phone"\n',
+            encoding="utf-8",
+        )
+
+        build_dir = case_dir / "build" / "site_070"
+        runner = CliRunner()
+        result = runner.invoke(
+            dev_site,
+            [
+                "--site-path",
+                str(site_dir),
+                "--action",
+                "render",
+                "--build-path",
+                str(build_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert (build_dir / "secrets.yaml").exists()
     finally:
         _cleanup_case_dir(case_dir)

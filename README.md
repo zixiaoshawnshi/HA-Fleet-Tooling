@@ -19,6 +19,12 @@ ha-fleet diff --site-path ./sites/site_001
 
 # Ingest discovery snapshot from an edge backup
 ha-fleet ingest-backup --site-path ./sites/site_001 --backup ./site_001_backup.tar.gz
+
+# Create a new site scaffold
+ha-fleet new-site --sites-root ./sites --site-id site_003 --display-name "Pilot Site 003"
+
+# Local operator dev loop (render and/or run Docker-backed HA preview)
+ha-fleet dev-site --site-path ./sites/site_001 --action up --port 8123
 ```
 
 ## Current Scope
@@ -30,7 +36,8 @@ Implemented:
 - Rendering for YAML dashboards (`dashboards/*.yaml` + `overlays/dashboards/*.yaml`)
 - Backup artifact generation
 - Backup ingestion for operator-side discovery snapshots
-- CLI commands: `validate`, `render`, `bundle-to-backup`, `ingest-backup`
+- Site scaffolding and operator dev-loop commands
+- CLI commands: `validate`, `render`, `bundle-to-backup`, `ingest-backup`, `new-site`, `dev-site`
 
 Not implemented yet:
 - Real `diff` behavior
@@ -88,6 +95,27 @@ ha-fleet ingest-backup \
 
 Reads HA registry files from backup archives and writes a sanitized discovery
 snapshot for operator review.
+
+### new-site
+
+```bash
+ha-fleet new-site --sites-root ./sites --site-id site_003 --display-name "Pilot Site 003"
+```
+
+Creates a standard site folder scaffold (`manifest`, `secrets contract`,
+`dashboards`, `overlays`, `operator`, `discovery`).
+
+### dev-site
+
+```bash
+ha-fleet dev-site --site-path ./sites/site_001 --action up --port 8123
+ha-fleet dev-site --site-path ./sites/site_001 --action render
+ha-fleet dev-site --site-path ./sites/site_001 --action restart
+ha-fleet dev-site --site-path ./sites/site_001 --action down
+```
+
+Runs the operator preview loop by rendering to build output, copying local mock
+secrets if available, and managing a local Home Assistant container.
 
 ## Development
 

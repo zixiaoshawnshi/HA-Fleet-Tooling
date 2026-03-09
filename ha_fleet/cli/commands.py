@@ -1,5 +1,7 @@
-﻿"""CLI commands for ha-fleet."""
+"""CLI commands for ha-fleet."""
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +42,73 @@ def _load_bundle_definition(site_dir: Path, bundle_name: str) -> BundleDefinitio
         data = yaml.safe_load(f) or {}
     data.setdefault("name", bundle_name)
     return BundleDefinition(**data)
+
+
+def _default_build_path(site_dir: Path) -> Path:
+    """Infer a build output directory from a site path."""
+    if site_dir.parent.name == "sites":
+        return site_dir.parent.parent / "build" / site_dir.name
+    return site_dir / "build"
+
+
+def _render_site(site_dir: Path, output_dir: Path) -> SiteManifest:
+    """Render a site into an output directory and return its manifest."""
+    manifest = _load_manifest(site_dir)
+
+    click.echo(f"OK Loaded manifest: {manifest.display_name}")
+    click.echo(f"OK Bundles: {', '.join(manifest.bundles)}")
+
+    renderer = ConfigRenderer(manifest, site_dir)
+    renderer.write_to_dir(output_dir, format="yaml")
+    click.echo(f"OK Rendered to {output_dir}")
+    return manifest
+
+
+def _copy_operator_secrets(site_dir: Path, build_dir: Path, refresh: bool) -> None:
+    """Copy local operator mock secrets into build config, if present."""
+    secrets_example = site_dir / "operator" / "secrets.local.example.yaml"
+    secrets_target = build_dir / "secrets.yaml"
+    if not secrets_example.exists():
+        click.echo(f"Note: no operator secrets template at {secrets_example}")
+        return
+
+    if refresh or not secrets_target.exists():
+        secrets_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(secrets_example, secrets_target)
+        click.echo(f"OK Copied local mock secrets to {secrets_target}")
+
+
+def _ensure_docker_available() -> None:
+    """Ensure docker exists on PATH."""
+    if shutil.which("docker") is None:
+        raise RuntimeError("docker command not found on PATH")
+
+
+def _docker_capture(args: list[str]) -> str:
+    """Run a docker command and return stdout."""
+    result = subprocess.run(["docker", *args], check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip())
+    return result.stdout.strip()
+
+
+def _docker_stream(args: list[str]) -> None:
+    """Run a docker command attached to current terminal streams."""
+    result = subprocess.run(["docker", *args], check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"docker {' '.join(args)} failed with code {result.returncode}")
+
+
+def _container_exists(container_name: str) -> bool:
+    """Check whether a docker container exists."""
+    output = _docker_capture(["ps", "-a", "--filter", f"name=^/{container_name}$", "--format", "{{.Names}}"])
+    return output == container_name
+
+
+def _remove_container_if_exists(container_name: str) -> None:
+    """Remove existing container if present."""
+    if _container_exists(container_name):
+        _docker_capture(["rm", "-f", container_name])
 
 
 @click.command()
@@ -263,4 +332,217 @@ def ingest_backup(site_path: str, backup: str, output: Optional[str]) -> None:
         click.echo(f"  Config entries: {snapshot['counts']['config_entries']}")
     except Exception as e:
         click.echo(f"Ingest failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
+@click.command(name="new-site")
+@click.option(
+    "--sites-root",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to sites directory (e.g., ./sites)",
+)
+@click.option("--site-id", required=True, type=str, help="Site identifier (e.g., site_003)")
+@click.option(
+    "--display-name",
+    default=None,
+    type=str,
+    help="Display name (default: derived from site-id)",
+)
+@click.option("--hardware-class", default="lenovo_tiny", type=str, help="Hardware class value")
+@click.option("--runtime", default="haos_bare_metal", type=str, help="Runtime value")
+@click.option("--dry-run", is_flag=True, help="Print planned files and directories only")
+def new_site(
+    sites_root: str,
+    site_id: str,
+    display_name: Optional[str],
+    hardware_class: str,
+    runtime: str,
+    dry_run: bool,
+) -> None:
+    """Scaffold a new site directory with standard files."""
+    try:
+        if not all(c.isalnum() or c in {"_", "-"} for c in site_id):
+            raise ValueError("site-id may only contain letters, numbers, underscores, and hyphens")
+
+        sites_root_path = Path(sites_root)
+        site_path = sites_root_path / site_id
+        if site_path.exists():
+            raise FileExistsError(f"Site already exists: {site_path}")
+
+        resolved_display_name = display_name or site_id.replace("_", " ").replace("-", " ")
+
+        directories = [
+            site_path,
+            site_path / "bundles",
+            site_path / "overlays",
+            site_path / "dashboards",
+            site_path / "operator",
+            site_path / "discovery",
+        ]
+        files = {
+            site_path / "site_manifest.yaml": f"""site_id: {site_id}
+display_name: {resolved_display_name}
+
+hardware_class: {hardware_class}
+runtime: {runtime}
+
+bundles: []
+
+capabilities:
+  zigbee: false
+  mqtt: false
+  google_calendar: false
+
+addons: []
+
+required_entities: []
+optional_entities: []
+
+required_secrets: []
+optional_secrets: []
+""",
+            site_path / "secrets_contract.yaml": f"""required: []
+optional: []
+description: Secrets contract for {site_id}
+""",
+            site_path / "overlays" / "README.md": f"""# Site-specific automation overlays for {site_id}.
+# Files matching automations_*.yaml are appended by renderer.
+# Optional dashboard overlays live under overlays/dashboards/*.yaml and
+# override dashboards with matching relative paths from ../dashboards.
+""",
+            site_path / "dashboards" / "ui-lovelace.yaml": f"""title: {resolved_display_name}
+views:
+  - title: Home
+    path: home
+    icon: mdi:home-assistant
+    cards:
+      - type: markdown
+        title: Fleet Dashboard
+        content: |
+          Replace this view with site-specific cards.
+""",
+            site_path / "operator" / "secrets.local.example.yaml": f"""# Operator-only local secrets for dashboard and automation preview.
+# Copy this file to build/{site_id}/secrets.yaml before launching local HA.
+""",
+            site_path / "discovery" / "README.md": f"""# Discovery snapshots
+
+This folder stores operator-ingested discovery snapshots from edge HA backups.
+
+- Primary file: `latest.yaml`
+- Generated by:
+  - `ha-fleet ingest-backup --site-path ./sites/{site_id} --backup <backup.tar.gz>`
+
+Do not place secrets in this folder.
+""",
+        }
+
+        if dry_run:
+            click.echo(f"[dry-run] Would create site scaffold at {site_path}")
+            for directory in directories:
+                click.echo(f"[dry-run] mkdir {directory}")
+            for file_path in files:
+                click.echo(f"[dry-run] write {file_path}")
+            return
+
+        for directory in directories:
+            directory.mkdir(parents=True, exist_ok=True)
+        for file_path, content in files.items():
+            file_path.write_text(content, encoding="utf-8")
+
+        click.echo(f"OK Created new site scaffold: {site_id}")
+        click.echo(f"  Path: {site_path}")
+    except Exception as e:
+        click.echo(f"New site creation failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
+@click.command(name="dev-site")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to site directory",
+)
+@click.option(
+    "--action",
+    default="up",
+    type=click.Choice(["up", "down", "restart", "render", "logs"]),
+    help="Action for local site development",
+)
+@click.option(
+    "--build-path",
+    default=None,
+    type=click.Path(),
+    help="Build output directory (default: inferred from site path)",
+)
+@click.option("--port", default=8123, type=int, help="Host port for container")
+@click.option(
+    "--image",
+    default="ghcr.io/home-assistant/home-assistant:stable",
+    type=str,
+    help="Docker image for local Home Assistant",
+)
+@click.option(
+    "--container-name",
+    default=None,
+    type=str,
+    help="Container name (default: ha-fleet-dev-<site-id>)",
+)
+@click.option(
+    "--refresh-secrets",
+    is_flag=True,
+    help="Overwrite build secrets.yaml from operator template every run",
+)
+def dev_site(
+    site_path: str,
+    action: str,
+    build_path: Optional[str],
+    port: int,
+    image: str,
+    container_name: Optional[str],
+    refresh_secrets: bool,
+) -> None:
+    """Render and run a local Home Assistant dev container for a site."""
+    site_dir = Path(site_path)
+    resolved_build_path = Path(build_path) if build_path else _default_build_path(site_dir)
+    resolved_container_name = container_name or f"ha-fleet-dev-{site_dir.name}"
+
+    try:
+        if action in {"up", "restart", "render"}:
+            _render_site(site_dir, resolved_build_path)
+            _copy_operator_secrets(site_dir, resolved_build_path, refresh_secrets)
+            if action == "render":
+                return
+
+        _ensure_docker_available()
+
+        if action == "down":
+            _remove_container_if_exists(resolved_container_name)
+            click.echo(f"OK Container removed: {resolved_container_name}")
+            return
+
+        if action == "logs":
+            _docker_stream(["logs", "-f", resolved_container_name])
+            return
+
+        # up / restart
+        _remove_container_if_exists(resolved_container_name)
+        host_config_path = str(resolved_build_path.resolve())
+        _docker_capture(
+            [
+                "run",
+                "-d",
+                "--name",
+                resolved_container_name,
+                "-p",
+                f"{port}:8123",
+                "-v",
+                f"{host_config_path}:/config",
+                image,
+            ]
+        )
+        click.echo(f"OK Started {resolved_container_name} on http://localhost:{port}")
+    except Exception as e:
+        click.echo(f"Dev site action failed: {e}", err=True)
         raise click.exceptions.Exit(1)

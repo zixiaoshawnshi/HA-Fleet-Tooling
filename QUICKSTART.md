@@ -80,7 +80,9 @@ mypy ha_fleet/
 ✅ **Complete:**
 - Project structure
 - `pyproject.toml` (dependencies, metadata)
-- CLI skeleton with 5 main commands:
+- CLI skeleton with 7 main commands:
+  - `ha-fleet new-site` — scaffold a new site directory
+  - `ha-fleet dev-site` — local operator dev loop (render/docker preview)
   - `ha-fleet ingest-backup` — extract discovery snapshot from HA backup
   - `ha-fleet validate` — validate site configs
   - `ha-fleet render` — render bundles to YAML
