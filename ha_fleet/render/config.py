@@ -190,12 +190,7 @@ class ConfigRenderer:
         slug = rel_path.replace("\\", "-").replace("/", "-").replace("_", "-").replace(".", "-")
         return slug.lower()
 
-    def render_configuration(
-        self,
-        dashboards: Dict[str, Any],
-        overrides: str,
-        include_dev_draft_dashboard: bool = False,
-    ) -> str:
+    def render_configuration(self, dashboards: Dict[str, Any], overrides: str) -> str:
         """Render configuration.yaml text with lovelace dashboard registrations."""
         lines = [
             "default_config:",
@@ -206,7 +201,7 @@ class ConfigRenderer:
             "",
         ]
 
-        if dashboards or include_dev_draft_dashboard:
+        if dashboards:
             lines.extend(
                 [
                     "lovelace:",
@@ -233,23 +228,12 @@ class ConfigRenderer:
                         f"      filename: dashboards/{rel_path}",
                     ]
                 )
-            if include_dev_draft_dashboard:
-                lines.extend(
-                    [
-                        "    fleet-draft:",
-                        "      mode: storage",
-                        "      title: Fleet Draft",
-                        "      icon: mdi:pencil",
-                        "      show_in_sidebar: true",
-                        "      require_admin: true",
-                    ]
-                )
         config_text = "\n".join(lines) + "\n"
         if overrides:
             config_text += "\n" + overrides
         return config_text
 
-    def render_all(self, include_dev_draft_dashboard: bool = False) -> Dict[str, Any]:
+    def render_all(self) -> Dict[str, Any]:
         """
         Render all config sections.
 
@@ -263,21 +247,12 @@ class ConfigRenderer:
             "scripts": self.render_scripts(),
             "input_booleans": self.render_input_booleans(),
             "dashboards": dashboards,
-            "configuration": self.render_configuration(
-                dashboards,
-                overrides,
-                include_dev_draft_dashboard=include_dev_draft_dashboard,
-            ),
+            "configuration": self.render_configuration(dashboards, overrides),
             "configuration_overrides": overrides,
         }
         return config
 
-    def write_to_dir(
-        self,
-        output_dir: Path,
-        format: str = "yaml",
-        include_dev_draft_dashboard: bool = False,
-    ) -> None:
+    def write_to_dir(self, output_dir: Path, format: str = "yaml") -> None:
         """
         Write rendered config to directory.
 
@@ -286,7 +261,7 @@ class ConfigRenderer:
             format: Output format ('yaml' or 'json')
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        config = self.render_all(include_dev_draft_dashboard=include_dev_draft_dashboard)
+        config = self.render_all()
 
         for section_name, config_data in config.items():
             if section_name == "dashboards":
