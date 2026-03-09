@@ -211,6 +211,7 @@ def test_write_to_dir_outputs_dashboards_directory() -> None:
         configuration_text = configuration_file.read_text(encoding="utf-8")
         assert "lovelace:" in configuration_text
         assert "dashboards:" in configuration_text
+        assert "fleet-test-site-ui-lovelace-yaml:" in configuration_text
         assert "filename: dashboards/ui-lovelace.yaml" in configuration_text
     finally:
         _cleanup_case_dir(case_dir)

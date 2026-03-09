@@ -164,7 +164,7 @@ class ConfigRenderer:
 
     def _dashboard_slug(self, rel_path: str) -> str:
         """Build a stable dashboard key from relative file path."""
-        slug = rel_path.replace("\\", "_").replace("/", "_").replace("-", "_").replace(".", "_")
+        slug = rel_path.replace("\\", "-").replace("/", "-").replace("_", "-").replace(".", "-")
         return slug.lower()
 
     def render_configuration(self, dashboards: Dict[str, Any]) -> str:
@@ -187,7 +187,8 @@ class ConfigRenderer:
                 ]
             )
             for rel_path, dashboard_data in sorted(dashboards.items()):
-                key = f"fleet_{self.manifest.site_id}_{self._dashboard_slug(rel_path)}"
+                site_slug = self.manifest.site_id.replace("_", "-").lower()
+                key = f"fleet-{site_slug}-{self._dashboard_slug(rel_path)}"
                 title = "Fleet Dashboard"
                 if isinstance(dashboard_data, dict):
                     maybe_title = dashboard_data.get("title")
