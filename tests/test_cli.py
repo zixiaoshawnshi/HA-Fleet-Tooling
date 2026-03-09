@@ -298,3 +298,42 @@ def test_dev_site_render_creates_build_and_secrets() -> None:
         assert (build_dir / "secrets.yaml").exists()
     finally:
         _cleanup_case_dir(case_dir)
+
+
+def test_dev_site_render_can_enable_draft_dashboard() -> None:
+    """dev-site render can include editable draft dashboard registration."""
+    case_dir = _new_case_dir()
+    try:
+        site_dir = case_dir / "sites" / "site_071"
+        (site_dir / "bundles").mkdir(parents=True)
+        (site_dir / "overlays").mkdir()
+        (site_dir / "operator").mkdir()
+        (site_dir / "dashboards").mkdir()
+        _write_manifest(site_dir, bundles=[])
+        (site_dir / "dashboards" / "ui-lovelace.yaml").write_text("title: Ops\n", encoding="utf-8")
+        (site_dir / "operator" / "secrets.local.example.yaml").write_text(
+            'notify_mobile_target: "operator_phone"\n',
+            encoding="utf-8",
+        )
+
+        build_dir = case_dir / "build" / "site_071"
+        runner = CliRunner()
+        result = runner.invoke(
+            dev_site,
+            [
+                "--site-path",
+                str(site_dir),
+                "--action",
+                "render",
+                "--build-path",
+                str(build_dir),
+                "--enable-draft-dashboard",
+            ],
+        )
+
+        assert result.exit_code == 0
+        configuration_text = (build_dir / "configuration.yaml").read_text(encoding="utf-8")
+        assert "fleet-draft:" in configuration_text
+        assert "title: Fleet Draft" in configuration_text
+    finally:
+        _cleanup_case_dir(case_dir)

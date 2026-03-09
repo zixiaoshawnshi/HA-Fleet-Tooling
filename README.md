@@ -28,6 +28,9 @@ ha-fleet new-site --sites-root ./sites --site-id site_003 --display-name "Pilot 
 
 # Local operator dev loop (render and/or run Docker-backed HA preview)
 ha-fleet dev-site --site-path ./sites/site_001 --action up --port 8123
+
+# Local operator dev loop with editable "Fleet Draft" dashboard in HA UI
+ha-fleet dev-site --site-path ./sites/site_001 --action up --enable-draft-dashboard
 ```
 
 ## Current Scope
@@ -128,11 +131,16 @@ sanitized discovery snapshot for operator review.
 ha-fleet dev-site --site-path ./sites/site_001 --action up --port 8123
 ha-fleet dev-site --site-path ./sites/site_001 --action render
 ha-fleet dev-site --site-path ./sites/site_001 --action restart
+ha-fleet dev-site --site-path ./sites/site_001 --action up --enable-draft-dashboard
 ha-fleet dev-site --site-path ./sites/site_001 --action down
 ```
 
 Runs the operator preview loop by rendering to build output, copying local mock
 secrets if available, and managing a local Home Assistant container.
+
+Use `--enable-draft-dashboard` to add a storage-mode `Fleet Draft` dashboard
+alongside fleet-managed YAML dashboards. This provides a UI-editable workspace
+for fast cosmetic iteration.
 
 ## Development
 

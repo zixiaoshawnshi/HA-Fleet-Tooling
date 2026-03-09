@@ -198,6 +198,13 @@ A simple way is the tooling CLI `dev-site` command:
     --action up \
     --port 8123
 
+# same, but with an editable storage dashboard ("Fleet Draft") for quick UI edits
+../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
+    --site-path ./sites/site_001 \
+    --action up \
+    --port 8123 \
+    --enable-draft-dashboard
+
 # re-render only (no container restart)
 ../ha-fleet-tooling/.venv/Scripts/ha-fleet dev-site \
     --site-path ./sites/site_001 \
@@ -223,6 +230,11 @@ Once the container starts you can open `http://localhost:8123` in your browser
 and the UI will reflect the rendered YAML. This is much faster than installing
 a new device and creates an iterative feedback loop for dashboards or other
 UI elements.
+
+When `--enable-draft-dashboard` is set, the generated `configuration.yaml`
+includes a sidebar dashboard named **Fleet Draft** in storage mode. You can use
+that dashboard in HA's graphical editor for cosmetic experimentation, then copy
+the final YAML into `sites/<site_id>/dashboards/*.yaml`.
 
 This operator workflow is also useful for pre-deployment mockups: you can show
 what dashboards and automations will look like on a laptop before arriving

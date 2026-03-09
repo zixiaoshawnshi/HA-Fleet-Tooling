@@ -51,7 +51,7 @@ def _default_build_path(site_dir: Path) -> Path:
     return site_dir / "build"
 
 
-def _render_site(site_dir: Path, output_dir: Path) -> SiteManifest:
+def _render_site(site_dir: Path, output_dir: Path, enable_draft_dashboard: bool = False) -> SiteManifest:
     """Render a site into an output directory and return its manifest."""
     manifest = _load_manifest(site_dir)
 
@@ -59,7 +59,11 @@ def _render_site(site_dir: Path, output_dir: Path) -> SiteManifest:
     click.echo(f"OK Bundles: {', '.join(manifest.bundles)}")
 
     renderer = ConfigRenderer(manifest, site_dir)
-    renderer.write_to_dir(output_dir, format="yaml")
+    renderer.write_to_dir(
+        output_dir,
+        format="yaml",
+        include_dev_draft_dashboard=enable_draft_dashboard,
+    )
     click.echo(f"OK Rendered to {output_dir}")
     return manifest
 
@@ -541,6 +545,11 @@ Do not place secrets in this folder.
     is_flag=True,
     help="Overwrite build secrets.yaml from operator template every run",
 )
+@click.option(
+    "--enable-draft-dashboard",
+    is_flag=True,
+    help="Add an editable 'Fleet Draft' storage dashboard for UI authoring in local dev",
+)
 def dev_site(
     site_path: str,
     action: str,
@@ -549,6 +558,7 @@ def dev_site(
     image: str,
     container_name: Optional[str],
     refresh_secrets: bool,
+    enable_draft_dashboard: bool,
 ) -> None:
     """Render and run a local Home Assistant dev container for a site."""
     site_dir = Path(site_path)
@@ -557,7 +567,11 @@ def dev_site(
 
     try:
         if action in {"up", "restart", "render"}:
-            _render_site(site_dir, resolved_build_path)
+            _render_site(
+                site_dir,
+                resolved_build_path,
+                enable_draft_dashboard=enable_draft_dashboard,
+            )
             _copy_operator_secrets(site_dir, resolved_build_path, refresh_secrets)
             if action == "render":
                 return

@@ -239,3 +239,26 @@ def test_configuration_overrides_are_appended() -> None:
         assert "!secret alpha_vantage_api_key" in configuration_text
     finally:
         _cleanup_case_dir(case_dir)
+
+
+def test_render_can_include_dev_draft_dashboard() -> None:
+    """Renderer can include a storage-mode draft dashboard for local authoring."""
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        (site_dir / "dashboards").mkdir()
+        with open(site_dir / "dashboards" / "ui-lovelace.yaml", "w", encoding="utf-8") as f:
+            yaml.safe_dump({"title": "Ops Dashboard"}, f)
+
+        output_dir = case_dir / "build"
+        manifest = get_minimal_site_manifest()
+        renderer = ConfigRenderer(manifest, site_dir)
+        renderer.write_to_dir(output_dir, include_dev_draft_dashboard=True)
+
+        configuration_text = (output_dir / "configuration.yaml").read_text(encoding="utf-8")
+        assert "fleet-draft:" in configuration_text
+        assert "title: Fleet Draft" in configuration_text
+        assert "mode: storage" in configuration_text
+        assert "require_admin: true" in configuration_text
+    finally:
+        _cleanup_case_dir(case_dir)
