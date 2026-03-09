@@ -118,3 +118,35 @@ def test_ingest_fails_if_no_registry_files() -> None:
             BackupDiscoveryIngestor().ingest(backup_path, site_id="site_001")
     finally:
         _cleanup_case_dir(case_dir)
+
+
+def test_ingest_config_dir_reads_storage_registries() -> None:
+    """Ingestor should parse registry files directly from .storage directory."""
+    case_dir = _new_case_dir()
+    try:
+        config_dir = case_dir / "config"
+        storage_dir = config_dir / ".storage"
+        storage_dir.mkdir(parents=True)
+        device_registry, entity_registry, config_entries = _build_registry_payloads()
+
+        (storage_dir / "core.device_registry").write_text(
+            json.dumps(device_registry),
+            encoding="utf-8",
+        )
+        (storage_dir / "core.entity_registry").write_text(
+            json.dumps(entity_registry),
+            encoding="utf-8",
+        )
+        (storage_dir / "core.config_entries").write_text(
+            json.dumps(config_entries),
+            encoding="utf-8",
+        )
+
+        snapshot = BackupDiscoveryIngestor().ingest_config_dir(config_dir, site_id="site_001")
+        assert snapshot["site_id"] == "site_001"
+        assert snapshot["source_config_dir"] == str(config_dir)
+        assert snapshot["counts"]["devices"] == 1
+        assert snapshot["counts"]["entities"] == 1
+        assert snapshot["counts"]["config_entries"] == 1
+    finally:
+        _cleanup_case_dir(case_dir)

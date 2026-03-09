@@ -10,7 +10,15 @@ from pathlib import Path
 import yaml
 from click.testing import CliRunner
 
-from ha_fleet.cli.commands import bundle_to_backup, dev_site, diff, ingest_backup, new_site, validate
+from ha_fleet.cli.commands import (
+    bundle_to_backup,
+    dev_site,
+    diff,
+    ingest_backup,
+    ingest_config_dir,
+    new_site,
+    validate,
+)
 
 TEST_ROOT = Path("tests") / "_tmp"
 
@@ -164,6 +172,53 @@ def test_ingest_backup_writes_snapshot_file() -> None:
                 str(case_dir),
                 "--backup",
                 str(backup_path),
+                "--output",
+                str(output_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert output_path.exists()
+        snapshot = yaml.safe_load(output_path.read_text(encoding="utf-8"))
+        assert snapshot["counts"]["devices"] == 1
+        assert snapshot["counts"]["entities"] == 1
+        assert snapshot["counts"]["config_entries"] == 1
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_ingest_config_dir_writes_snapshot_file() -> None:
+    """Config-dir ingest should read .storage and write discovery snapshot."""
+    case_dir = _new_case_dir()
+    try:
+        (case_dir / "bundles").mkdir()
+        (case_dir / "overlays").mkdir()
+        _write_manifest(case_dir, bundles=[])
+
+        storage_dir = case_dir / "ha_config" / ".storage"
+        storage_dir.mkdir(parents=True)
+        (storage_dir / "core.device_registry").write_text(
+            json.dumps({"data": {"devices": [{"id": "dev1", "name": "Sensor Device"}]}}),
+            encoding="utf-8",
+        )
+        (storage_dir / "core.entity_registry").write_text(
+            json.dumps({"data": {"entities": [{"entity_id": "sensor.temp", "platform": "mqtt"}]}}),
+            encoding="utf-8",
+        )
+        (storage_dir / "core.config_entries").write_text(
+            json.dumps({"data": {"entries": [{"entry_id": "cfg1", "domain": "mqtt", "title": "MQTT"}]}}),
+            encoding="utf-8",
+        )
+
+        output_path = case_dir / "discovery" / "latest.yaml"
+        runner = CliRunner()
+        result = runner.invoke(
+            ingest_config_dir,
+            [
+                "--site-path",
+                str(case_dir),
+                "--config-dir",
+                str(storage_dir.parent),
                 "--output",
                 str(output_path),
             ],

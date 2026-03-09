@@ -20,6 +20,9 @@ ha-fleet diff --site-path ./sites/site_001
 # Ingest discovery snapshot from an edge backup
 ha-fleet ingest-backup --site-path ./sites/site_001 --backup ./site_001_backup.tar.gz
 
+# Ingest discovery snapshot from a local HA config directory
+ha-fleet ingest-config-dir --site-path ./sites/site_001 --config-dir ./build/site_001
+
 # Create a new site scaffold
 ha-fleet new-site --sites-root ./sites --site-id site_003 --display-name "Pilot Site 003"
 
@@ -37,8 +40,9 @@ Implemented:
 - Auto-generated `configuration.yaml` with `lovelace.dashboards` registrations
 - Backup artifact generation
 - Backup ingestion for operator-side discovery snapshots
+- Config-directory ingestion for operator-side discovery snapshots
 - Site scaffolding and operator dev-loop commands
-- CLI commands: `validate`, `render`, `bundle-to-backup`, `ingest-backup`, `new-site`, `dev-site`
+- CLI commands: `validate`, `render`, `bundle-to-backup`, `ingest-backup`, `ingest-config-dir`, `new-site`, `dev-site`
 
 Not implemented yet:
 - Real `diff` behavior
@@ -105,6 +109,18 @@ ha-fleet new-site --sites-root ./sites --site-id site_003 --display-name "Pilot 
 
 Creates a standard site folder scaffold (`manifest`, `secrets contract`,
 `dashboards`, `overlays`, `operator`, `discovery`).
+
+### ingest-config-dir
+
+```bash
+ha-fleet ingest-config-dir \
+  --site-path ./sites/site_001 \
+  --config-dir ./build/site_001 \
+  --output ./sites/site_001/discovery/latest.yaml
+```
+
+Reads HA registry files directly from `<config-dir>/.storage/` and writes a
+sanitized discovery snapshot for operator review.
 
 ### dev-site
 

@@ -129,6 +129,7 @@ def test_render_all_returns_dict() -> None:
         assert "input_booleans" in config
         assert "dashboards" in config
         assert "configuration" in config
+        assert "configuration_overrides" in config
     finally:
         _cleanup_case_dir(case_dir)
 
@@ -213,5 +214,28 @@ def test_write_to_dir_outputs_dashboards_directory() -> None:
         assert "dashboards:" in configuration_text
         assert "fleet-test-site-ui-lovelace-yaml:" in configuration_text
         assert "filename: dashboards/ui-lovelace.yaml" in configuration_text
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_configuration_overrides_are_appended() -> None:
+    """Site-level configuration overrides should be appended to configuration.yaml."""
+    case_dir = _new_case_dir()
+    try:
+        site_dir = _setup_site(case_dir)
+        override_file = site_dir / "configuration_overrides.yaml"
+        override_file.write_text(
+            "sensor:\n  - platform: alpha_vantage\n    api_key: !secret alpha_vantage_api_key\n",
+            encoding="utf-8",
+        )
+
+        output_dir = case_dir / "build"
+        manifest = get_minimal_site_manifest()
+        renderer = ConfigRenderer(manifest, site_dir)
+        renderer.write_to_dir(output_dir)
+
+        configuration_text = (output_dir / "configuration.yaml").read_text(encoding="utf-8")
+        assert "platform: alpha_vantage" in configuration_text
+        assert "!secret alpha_vantage_api_key" in configuration_text
     finally:
         _cleanup_case_dir(case_dir)

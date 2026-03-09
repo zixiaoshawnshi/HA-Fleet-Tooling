@@ -37,6 +37,56 @@ class BackupDiscoveryIngestor:
                 ".storage/core.entity_registry, .storage/core.config_entries)"
             )
 
+        return self._build_snapshot(
+            registries=registries,
+            site_id=site_id,
+            source=backup_filename or backup_path.name,
+            source_key="source_backup",
+        )
+
+    def ingest_config_dir(
+        self,
+        config_dir: Path,
+        site_id: str,
+    ) -> Dict[str, Any]:
+        """Read registry files directly from a Home Assistant config directory."""
+        storage_dir = config_dir / ".storage"
+        if not storage_dir.exists():
+            raise FileNotFoundError(f".storage directory not found in config dir: {config_dir}")
+
+        registries: Dict[str, Dict[str, Any]] = {}
+        for registry_key, suffix in self.REGISTRY_SUFFIXES.items():
+            filename = f"core.{suffix.rsplit('.', 1)[-1]}"
+            registry_file = storage_dir / filename
+            if not registry_file.exists():
+                continue
+            try:
+                registries[registry_key] = json.loads(registry_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                continue
+
+        if not registries:
+            raise FileNotFoundError(
+                "No supported HA registry files found in config dir "
+                "(expected .storage/core.device_registry, "
+                ".storage/core.entity_registry, .storage/core.config_entries)"
+            )
+
+        return self._build_snapshot(
+            registries=registries,
+            site_id=site_id,
+            source=str(config_dir),
+            source_key="source_config_dir",
+        )
+
+    def _build_snapshot(
+        self,
+        registries: Dict[str, Dict[str, Any]],
+        site_id: str,
+        source: str,
+        source_key: str,
+    ) -> Dict[str, Any]:
+        """Build normalized snapshot payload from loaded registry dictionaries."""
         devices = self._sanitize_devices(registries.get("device_registry"))
         entities = self._sanitize_entities(registries.get("entity_registry"))
         config_entries = self._sanitize_config_entries(registries.get("config_entries"))
@@ -45,7 +95,7 @@ class BackupDiscoveryIngestor:
             "snapshot_version": 1,
             "captured_at_utc": datetime.now(timezone.utc).isoformat(),
             "site_id": site_id,
-            "source_backup": backup_filename or backup_path.name,
+            source_key: source,
             "counts": {
                 "devices": len(devices),
                 "entities": len(entities),

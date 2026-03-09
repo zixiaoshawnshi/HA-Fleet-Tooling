@@ -335,6 +335,53 @@ def ingest_backup(site_path: str, backup: str, output: Optional[str]) -> None:
         raise click.exceptions.Exit(1)
 
 
+@click.command(name="ingest-config-dir")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to site directory",
+)
+@click.option(
+    "--config-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to Home Assistant config directory containing .storage/",
+)
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(),
+    help="Output snapshot file path (default: <site>/discovery/latest.yaml)",
+)
+def ingest_config_dir(site_path: str, config_dir: str, output: Optional[str]) -> None:
+    """Ingest discovery data from a local Home Assistant config directory."""
+    site_dir = Path(site_path)
+    config_dir_path = Path(config_dir)
+    output_path = Path(output) if output else site_dir / "discovery" / "latest.yaml"
+
+    try:
+        manifest = _load_manifest(site_dir)
+        ingestor = BackupDiscoveryIngestor()
+        snapshot = ingestor.ingest_config_dir(
+            config_dir=config_dir_path,
+            site_id=manifest.site_id,
+        )
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(snapshot, f, sort_keys=False)
+
+        click.echo(f"OK Ingested config dir: {config_dir_path}")
+        click.echo(f"OK Wrote discovery snapshot: {output_path}")
+        click.echo(f"  Devices: {snapshot['counts']['devices']}")
+        click.echo(f"  Entities: {snapshot['counts']['entities']}")
+        click.echo(f"  Config entries: {snapshot['counts']['config_entries']}")
+    except Exception as e:
+        click.echo(f"Ingest config-dir failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
 @click.command(name="new-site")
 @click.option(
     "--sites-root",

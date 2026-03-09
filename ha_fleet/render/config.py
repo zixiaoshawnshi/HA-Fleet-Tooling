@@ -162,12 +162,35 @@ class ConfigRenderer:
 
         return dashboards
 
+    def render_configuration_overrides(self) -> str:
+        """Render raw configuration override snippets from site and overlays."""
+        snippets: List[str] = []
+        site_override = self.site_path / "configuration_overrides.yaml"
+        overlay_override = self.overlays_path / "configuration_overrides.yaml"
+
+        if site_override.exists():
+            with open(site_override, "r", encoding="utf-8") as f:
+                text = f.read().strip()
+                if text:
+                    snippets.append(text)
+
+        if overlay_override.exists():
+            with open(overlay_override, "r", encoding="utf-8") as f:
+                text = f.read().strip()
+                if text:
+                    snippets.append(text)
+
+        if not snippets:
+            return ""
+
+        return "\n\n".join(snippets) + "\n"
+
     def _dashboard_slug(self, rel_path: str) -> str:
         """Build a stable dashboard key from relative file path."""
         slug = rel_path.replace("\\", "-").replace("/", "-").replace("_", "-").replace(".", "-")
         return slug.lower()
 
-    def render_configuration(self, dashboards: Dict[str, Any]) -> str:
+    def render_configuration(self, dashboards: Dict[str, Any], overrides: str) -> str:
         """Render configuration.yaml text with lovelace dashboard registrations."""
         lines = [
             "default_config:",
@@ -205,7 +228,10 @@ class ConfigRenderer:
                         f"      filename: dashboards/{rel_path}",
                     ]
                 )
-        return "\n".join(lines) + "\n"
+        config_text = "\n".join(lines) + "\n"
+        if overrides:
+            config_text += "\n" + overrides
+        return config_text
 
     def render_all(self) -> Dict[str, Any]:
         """
@@ -215,12 +241,14 @@ class ConfigRenderer:
             Dict with keys: automations, scripts, input_booleans, etc.
         """
         dashboards = self.render_dashboards()
+        overrides = self.render_configuration_overrides()
         config = {
             "automations": self.render_automations(),
             "scripts": self.render_scripts(),
             "input_booleans": self.render_input_booleans(),
             "dashboards": dashboards,
-            "configuration": self.render_configuration(dashboards),
+            "configuration": self.render_configuration(dashboards, overrides),
+            "configuration_overrides": overrides,
         }
         return config
 
@@ -257,6 +285,9 @@ class ConfigRenderer:
                 output_file = output_dir / "configuration.yaml"
                 with open(output_file, "w", encoding="utf-8") as f:
                     f.write(str(config_data))
+                continue
+
+            if section_name == "configuration_overrides":
                 continue
 
             # Keep these include targets present, even when empty.

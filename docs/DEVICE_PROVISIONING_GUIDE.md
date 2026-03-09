@@ -276,6 +276,27 @@ Suggested workflow:
 4. Operator updates fleet config (`site_manifest`, bundles, dashboards) via PR.
 5. Deploy approved config back to edge.
 
+### Optional: Ingest Discovery From Local Operator HA Config
+
+If you are iterating in a local operator HA container and want to pull detected
+devices/entities into the site repo without generating a backup, ingest directly
+from the local config directory:
+
+```bash
+../ha-fleet-tooling/.venv/Scripts/ha-fleet ingest-config-dir \
+    --site-path ./sites/site_001 \
+    --config-dir ./build/site_001 \
+    --output ./sites/site_001/discovery/latest.yaml
+```
+
+This reads:
+- `.storage/core.device_registry`
+- `.storage/core.entity_registry`
+- `.storage/core.config_entries`
+
+Use this as a rapid local loop. For production edge truth, continue ingesting
+from edge-generated backups.
+
 ## 7. Canary Restore Test (Manual)
 
 1. Upload backup artifact to the edge device (method of choice).
