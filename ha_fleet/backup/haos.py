@@ -107,12 +107,12 @@ class HAOSBackupGenerator:
                 exclude_media=exclude_media,
                 exclude_history=exclude_history,
             )
-            with open(backup_temp_dir / "backup.json", "w") as f:
+            with open(backup_temp_dir / "backup.json", "w", encoding="utf-8") as f:
                 json.dump(backup_meta, f, indent=2)
 
             # Write homeassistant.json
             ha_config = self._create_ha_config_snapshot(rendered_config)
-            with open(backup_temp_dir / "homeassistant.json", "w") as f:
+            with open(backup_temp_dir / "homeassistant.json", "w", encoding="utf-8") as f:
                 json.dump(ha_config, f, indent=2)
 
             # Write config files

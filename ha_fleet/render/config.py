@@ -36,7 +36,7 @@ class ConfigRenderer:
         if not bundle_file.exists():
             raise FileNotFoundError(f"Bundle not found: {bundle_file}")
 
-        with open(bundle_file, "r") as f:
+        with open(bundle_file, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     def load_overlay(self, overlay_name: str) -> Dict[str, Any]:
@@ -45,7 +45,7 @@ class ConfigRenderer:
         if not overlay_file.exists():
             return {}
 
-        with open(overlay_file, "r") as f:
+        with open(overlay_file, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     def render_config_file(self, template_dir: str, filename: str, context: Dict[str, Any]) -> str:
@@ -64,7 +64,7 @@ class ConfigRenderer:
         if not template_path.exists():
             return ""
 
-        with open(template_path, "r") as f:
+        with open(template_path, "r", encoding="utf-8") as f:
             template_str = f.read()
 
         template = self.jinja_env.from_string(template_str)
@@ -92,12 +92,12 @@ class ConfigRenderer:
             # Load bundle automations if they exist
             bundle_auto_file = self.bundles_path / bundle_name / "automations.yaml"
             if bundle_auto_file.exists():
-                with open(bundle_auto_file, "r") as f:
+                with open(bundle_auto_file, "r", encoding="utf-8") as f:
                     automations.extend(yaml.safe_load(f) or [])
 
         # Apply overlays
         for overlay_file in (self.overlays_path).glob("automations_*.yaml"):
-            with open(overlay_file, "r") as f:
+            with open(overlay_file, "r", encoding="utf-8") as f:
                 automations.extend(yaml.safe_load(f) or [])
 
         return automations
@@ -109,14 +109,14 @@ class ConfigRenderer:
         for bundle_name in self.manifest.bundles:
             bundle_script_file = self.bundles_path / bundle_name / "scripts.yaml"
             if bundle_script_file.exists():
-                with open(bundle_script_file, "r") as f:
+                with open(bundle_script_file, "r", encoding="utf-8") as f:
                     bundle_scripts = yaml.safe_load(f) or {}
                     scripts.update(bundle_scripts)
 
         # Apply overlays
         overlay_script_file = self.overlays_path / "scripts.yaml"
         if overlay_script_file.exists():
-            with open(overlay_script_file, "r") as f:
+            with open(overlay_script_file, "r", encoding="utf-8") as f:
                 overlay_scripts = yaml.safe_load(f) or {}
                 scripts = self._merge_yaml_dicts(scripts, overlay_scripts)
 
@@ -129,13 +129,13 @@ class ConfigRenderer:
         for bundle_name in self.manifest.bundles:
             bundle_ib_file = self.bundles_path / bundle_name / "input_booleans.yaml"
             if bundle_ib_file.exists():
-                with open(bundle_ib_file, "r") as f:
+                with open(bundle_ib_file, "r", encoding="utf-8") as f:
                     bundle_ib = yaml.safe_load(f) or {}
                     input_booleans.update(bundle_ib)
 
         overlay_ib_file = self.overlays_path / "input_booleans.yaml"
         if overlay_ib_file.exists():
-            with open(overlay_ib_file, "r") as f:
+            with open(overlay_ib_file, "r", encoding="utf-8") as f:
                 overlay_ib = yaml.safe_load(f) or {}
                 input_booleans = self._merge_yaml_dicts(input_booleans, overlay_ib)
 
