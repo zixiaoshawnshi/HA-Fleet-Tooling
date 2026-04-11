@@ -84,6 +84,38 @@ class ConfigRenderer:
                 base[key] = value
         return base
 
+    def _parse_input_helpers(
+        self, filepath: Path
+    ) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        """Parse an input_helpers.yaml file and split entities by HA domain.
+
+        Detection rules:
+          - has ``options``        → input_select
+          - has ``min`` or ``max`` → input_number
+          - otherwise              → input_boolean
+
+        Returns:
+            (booleans, selects, numbers)
+        """
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        booleans: Dict[str, Any] = {}
+        selects: Dict[str, Any] = {}
+        numbers: Dict[str, Any] = {}
+
+        for key, config in data.items():
+            if not isinstance(config, dict):
+                continue
+            if "options" in config:
+                selects[key] = config
+            elif "min" in config or "max" in config:
+                numbers[key] = config
+            else:
+                booleans[key] = config
+
+        return booleans, selects, numbers
+
     def render_automations(self) -> List[Dict[str, Any]]:
         """Render automations from bundles + overlays."""
         automations: List[Dict[str, Any]] = []
@@ -123,23 +155,62 @@ class ConfigRenderer:
         return scripts
 
     def render_input_booleans(self) -> Dict[str, Any]:
-        """Render input booleans (helpers) from bundles."""
+        """Render input_boolean entities from bundles (input_booleans.yaml and input_helpers.yaml)."""
         input_booleans: Dict[str, Any] = {}
 
         for bundle_name in self.manifest.bundles:
+            # Dedicated file takes first pass
             bundle_ib_file = self.bundles_path / bundle_name / "input_booleans.yaml"
             if bundle_ib_file.exists():
                 with open(bundle_ib_file, "r", encoding="utf-8") as f:
-                    bundle_ib = yaml.safe_load(f) or {}
-                    input_booleans.update(bundle_ib)
+                    input_booleans.update(yaml.safe_load(f) or {})
+
+            # input_helpers.yaml — extract boolean-typed entities
+            bundle_helpers_file = self.bundles_path / bundle_name / "input_helpers.yaml"
+            if bundle_helpers_file.exists():
+                booleans, _, _ = self._parse_input_helpers(bundle_helpers_file)
+                input_booleans.update(booleans)
 
         overlay_ib_file = self.overlays_path / "input_booleans.yaml"
         if overlay_ib_file.exists():
             with open(overlay_ib_file, "r", encoding="utf-8") as f:
-                overlay_ib = yaml.safe_load(f) or {}
-                input_booleans = self._merge_yaml_dicts(input_booleans, overlay_ib)
+                input_booleans = self._merge_yaml_dicts(input_booleans, yaml.safe_load(f) or {})
 
         return input_booleans
+
+    def render_input_selects(self) -> Dict[str, Any]:
+        """Render input_select entities from bundles (input_helpers.yaml)."""
+        input_selects: Dict[str, Any] = {}
+
+        for bundle_name in self.manifest.bundles:
+            bundle_helpers_file = self.bundles_path / bundle_name / "input_helpers.yaml"
+            if bundle_helpers_file.exists():
+                _, selects, _ = self._parse_input_helpers(bundle_helpers_file)
+                input_selects.update(selects)
+
+        overlay_helpers_file = self.overlays_path / "input_helpers.yaml"
+        if overlay_helpers_file.exists():
+            _, selects, _ = self._parse_input_helpers(overlay_helpers_file)
+            input_selects = self._merge_yaml_dicts(input_selects, selects)
+
+        return input_selects
+
+    def render_input_numbers(self) -> Dict[str, Any]:
+        """Render input_number entities from bundles (input_helpers.yaml)."""
+        input_numbers: Dict[str, Any] = {}
+
+        for bundle_name in self.manifest.bundles:
+            bundle_helpers_file = self.bundles_path / bundle_name / "input_helpers.yaml"
+            if bundle_helpers_file.exists():
+                _, _, numbers = self._parse_input_helpers(bundle_helpers_file)
+                input_numbers.update(numbers)
+
+        overlay_helpers_file = self.overlays_path / "input_helpers.yaml"
+        if overlay_helpers_file.exists():
+            _, _, numbers = self._parse_input_helpers(overlay_helpers_file)
+            input_numbers = self._merge_yaml_dicts(input_numbers, numbers)
+
+        return input_numbers
 
     def render_dashboards(self) -> Dict[str, Any]:
         """Render dashboard YAML files from site and overlay directories."""
@@ -198,6 +269,8 @@ class ConfigRenderer:
             "automation: !include automations.yaml",
             "script: !include scripts.yaml",
             "input_boolean: !include input_booleans.yaml",
+            "input_select: !include input_selects.yaml",
+            "input_number: !include input_numbers.yaml",
             "",
         ]
 
@@ -246,6 +319,8 @@ class ConfigRenderer:
             "automations": self.render_automations(),
             "scripts": self.render_scripts(),
             "input_booleans": self.render_input_booleans(),
+            "input_selects": self.render_input_selects(),
+            "input_numbers": self.render_input_numbers(),
             "dashboards": dashboards,
             "configuration": self.render_configuration(dashboards, overrides),
             "configuration_overrides": overrides,
@@ -291,7 +366,9 @@ class ConfigRenderer:
                 continue
 
             # Keep these include targets present, even when empty.
-            should_write_empty = section_name in {"automations", "scripts", "input_booleans"}
+            should_write_empty = section_name in {
+                "automations", "scripts", "input_booleans", "input_selects", "input_numbers"
+            }
             if not config_data and not should_write_empty:
                 continue
 
