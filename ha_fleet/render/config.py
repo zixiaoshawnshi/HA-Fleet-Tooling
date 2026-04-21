@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Any, List, cast
+import shutil
 import yaml
 import json
 from jinja2 import Environment, FileSystemLoader
@@ -213,23 +214,32 @@ class ConfigRenderer:
         return input_numbers
 
     def render_dashboards(self) -> Dict[str, Any]:
-        """Render dashboard YAML files from site and overlay directories."""
+        """Collect dashboard YAML files from site and overlay directories.
+
+        Returns a dict mapping relative path → dict with keys:
+          - "source": Path to the source file (for verbatim copy at write time)
+          - all top-level parsed YAML keys (for title extraction in render_configuration)
+
+        Files are copied verbatim at write time to avoid yaml.dump() mangling.
+        """
         dashboards: Dict[str, Any] = {}
         site_dashboards_path = self.site_path / "dashboards"
         overlay_dashboards_path = self.overlays_path / "dashboards"
 
         if site_dashboards_path.exists():
-            for dashboard_file in site_dashboards_path.rglob("*.yaml"):
+            for dashboard_file in sorted(site_dashboards_path.rglob("*.yaml")):
                 rel_path = dashboard_file.relative_to(site_dashboards_path).as_posix()
                 with open(dashboard_file, "r", encoding="utf-8") as f:
-                    dashboards[rel_path] = yaml.safe_load(f) or {}
+                    parsed = yaml.safe_load(f) or {}
+                dashboards[rel_path] = {"source": dashboard_file, **parsed}
 
         # Overlay dashboard files override site dashboard files with same relative path.
         if overlay_dashboards_path.exists():
-            for dashboard_file in overlay_dashboards_path.rglob("*.yaml"):
+            for dashboard_file in sorted(overlay_dashboards_path.rglob("*.yaml")):
                 rel_path = dashboard_file.relative_to(overlay_dashboards_path).as_posix()
                 with open(dashboard_file, "r", encoding="utf-8") as f:
-                    dashboards[rel_path] = yaml.safe_load(f) or {}
+                    parsed = yaml.safe_load(f) or {}
+                dashboards[rel_path] = {"source": dashboard_file, **parsed}
 
         return dashboards
 
@@ -347,7 +357,12 @@ class ConfigRenderer:
                 for dashboard_rel_path, dashboard_data in config_data.items():
                     output_file = dashboards_dir / dashboard_rel_path
                     output_file.parent.mkdir(parents=True, exist_ok=True)
-                    if format == "yaml":
+                    # Copy verbatim from source to preserve formatting and avoid
+                    # yaml.dump() mangling (key reordering, backslash continuations).
+                    source_file = dashboard_data.get("source") if isinstance(dashboard_data, dict) else None
+                    if source_file and Path(source_file).exists():
+                        shutil.copy2(source_file, output_file)
+                    elif format == "yaml":
                         with open(output_file, "w", encoding="utf-8") as f:
                             yaml.dump(dashboard_data, f, default_flow_style=False)
                     elif format == "json":
