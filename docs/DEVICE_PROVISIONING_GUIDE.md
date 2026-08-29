@@ -42,6 +42,34 @@ Recommended:
 - Keep device on UPS power if available.
 - Reserve a DHCP lease or static IP in router.
 
+> **Weather integration:** Onboarding automatically starts a background setup
+> for the Met.no weather integration (creating `weather.forecast_home`) right
+> after the location step, using the location set in step 2. This call fails
+> silently if the device has no outbound network access at that moment, so it
+> is **not guaranteed** — confirm `weather.forecast_home` exists once
+> onboarding completes (Developer Tools -> States, or check the weather card
+> on the dashboard). If missing, add it manually: **Settings -> Devices &
+> Services -> Add Integration -> Met.no -> Submit** (no configuration
+> required, it uses the device's set location).
+
+> **Calendar integration (site_002_Kevin only):** Kevin's dashboard shows a
+> pictogram calendar backed by HA's built-in Local Calendar integration — one
+> calendar per pictogram category, no Google account or API key needed. Add
+> each of these via **Settings -> Devices & Services -> Add Integration ->
+> Local Calendar -> Submit**, using these exact names so the generated
+> entity_ids match what the dashboard expects:
+>
+> | Calendar Name (type exactly) | Resulting entity_id |
+> |---|---|
+> | Kevin Appointments | `calendar.kevin_appointments` |
+> | Kevin School | `calendar.kevin_school` |
+> | Kevin Family Fun | `calendar.kevin_family_fun` |
+> | Kevin Home Reminders | `calendar.kevin_home_reminders` |
+>
+> Parents add events directly through HA's native **Calendar** sidebar view,
+> picking whichever calendar matches the event's category — the pictogram is
+> chosen automatically based on which calendar the event was added to.
+
 ## 3. Baseline Hardening
 
 1. Enable backups in HA settings.
@@ -321,6 +349,8 @@ Pilot requirement:
 - [ ] Device reachable locally and over Tailscale
 - [ ] Long-lived token created and stored securely
 - [ ] Required secrets provisioned on edge
+- [ ] `weather.forecast_home` entity exists (Met.no onboarding setup can fail silently)
+- [ ] (site_002_Kevin only) All 4 `calendar.kevin_*` Local Calendar entities exist
 - [ ] `site_001` validate/render/backup completed
 - [ ] Canary restore succeeded
 - [ ] Rollback drill succeeded
