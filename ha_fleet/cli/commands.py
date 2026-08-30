@@ -10,6 +10,7 @@ import yaml
 
 from ha_fleet.backup.haos import HAOSBackupGenerator
 from ha_fleet.bundles.engine import BundleEngine
+from ha_fleet.deploy import DeployError, DeployTarget, run_push, run_rollback, run_verify
 from ha_fleet.discovery.ingest import BackupDiscoveryIngestor
 from ha_fleet.render.config import ConfigRenderer
 from ha_fleet.schemas.bundle import BundleDefinition
@@ -472,6 +473,19 @@ views:
             site_path / "operator" / "secrets.local.example.yaml": f"""# Operator-only local secrets for dashboard and automation preview.
 # Copy this file to build/{site_id}/secrets.yaml before launching local HA.
 """,
+            site_path / "operator" / "deploy_target.local.example.yaml": f"""# Operator-only local deploy target config for `ha-fleet deploy`.
+# Copy this file to deploy_target.local.yaml and fill in real values.
+# Never commit the real file (see .gitignore).
+host: "100.x.x.x"          # Tailscale IP or MagicDNS name for this device
+ssh_user: "root"            # required by the Terminal & SSH add-on for SFTP
+ssh_key_path: "~/.ssh/id_ha_fleet_deploy"
+ha_port: 8123
+# Long-lived access token: prefer the HA_FLEET_DEPLOY_TOKEN env var or
+# --token-file. Only set here as a last resort for single-operator setups --
+# if you do, keep this file (deploy_target.local.yaml, not this .example
+# copy) out of git.
+# token: ""
+""",
             site_path / "discovery" / "README.md": f"""# Discovery snapshots
 
 This folder stores operator-ingested discovery snapshots from edge HA backups.
@@ -592,4 +606,127 @@ def dev_site(
         click.echo(f"OK Started {resolved_container_name} on http://localhost:{port}")
     except Exception as e:
         click.echo(f"Dev site action failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
+def _load_deploy_target(site_dir: Path, token_file: Optional[str]) -> DeployTarget:
+    return DeployTarget.load(
+        site_dir,
+        token_file=Path(token_file) if token_file else None,
+    )
+
+
+def _echo_health(health) -> None:
+    if health is None:
+        return
+    for entity in health.entities:
+        status = "OK" if entity.ok else "FAIL"
+        click.echo(f"  {status} {entity.entity_id} ({entity.state})")
+
+
+@click.group(name="deploy")
+def deploy() -> None:
+    """Deploy rendered site config to a remote HAOS device over Tailscale/SSH."""
+
+
+@deploy.command(name="push")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to site directory",
+)
+@click.option("--build-path", default=None, type=click.Path(), help="Build output directory")
+@click.option(
+    "--skip-snapshot",
+    is_flag=True,
+    help="Skip the pre-deploy backup/generate safety snapshot (not recommended)",
+)
+@click.option(
+    "--token-file",
+    default=None,
+    type=click.Path(exists=True),
+    help="Path to a file containing the long-lived access token "
+    "(prefer the HA_FLEET_DEPLOY_TOKEN env var instead)",
+)
+def deploy_push(site_path: str, build_path: Optional[str], skip_snapshot: bool, token_file: Optional[str]) -> None:
+    """Render, snapshot, push, restart, and health-check a site deploy."""
+    site_dir = Path(site_path)
+    try:
+        target = _load_deploy_target(site_dir, token_file)
+        result = run_push(
+            site_dir,
+            target,
+            build_dir=Path(build_path) if build_path else None,
+            skip_snapshot=skip_snapshot,
+        )
+        _echo_health(result.health)
+        if not result.ok:
+            click.echo(result.message, err=True)
+            raise click.exceptions.Exit(1)
+        click.echo(f"OK {result.message}")
+    except DeployError as e:
+        click.echo(f"Deploy failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
+@deploy.command(name="rollback")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to site directory",
+)
+@click.option(
+    "--mode",
+    type=click.Choice(["config", "snapshot"]),
+    default="config",
+    help="config: fast, re-push the previous build (no state loss). "
+    "snapshot: full backup restore (reverts ALL state since that snapshot).",
+)
+@click.option("--token-file", default=None, type=click.Path(exists=True))
+@click.option("--yes", is_flag=True, help="Skip the snapshot-mode confirmation prompt")
+def deploy_rollback(site_path: str, mode: str, token_file: Optional[str], yes: bool) -> None:
+    """Roll back a deploy."""
+    site_dir = Path(site_path)
+    try:
+        if mode == "snapshot" and not yes:
+            click.confirm(
+                "This restores the FULL pre-deploy backup, reverting any state changes "
+                "(e.g. input_boolean toggles) since that snapshot, not just config files. Continue?",
+                abort=True,
+            )
+        target = _load_deploy_target(site_dir, token_file)
+        result = run_rollback(site_dir, target, mode=mode)
+        _echo_health(result.health)
+        if not result.ok:
+            click.echo(result.message, err=True)
+            raise click.exceptions.Exit(1)
+        click.echo(f"OK {result.message}")
+    except DeployError as e:
+        click.echo(f"Rollback failed: {e}", err=True)
+        raise click.exceptions.Exit(1)
+
+
+@deploy.command(name="verify")
+@click.option(
+    "--site-path",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Path to site directory",
+)
+@click.option("--token-file", default=None, type=click.Path(exists=True))
+def deploy_verify(site_path: str, token_file: Optional[str]) -> None:
+    """Re-run the post-deploy health check standalone."""
+    site_dir = Path(site_path)
+    try:
+        target = _load_deploy_target(site_dir, token_file)
+        result = run_verify(site_dir, target)
+        _echo_health(result.health)
+        if not result.ok:
+            click.echo(result.message, err=True)
+            raise click.exceptions.Exit(1)
+        click.echo(f"OK {result.message}")
+    except DeployError as e:
+        click.echo(f"Verify failed: {e}", err=True)
         raise click.exceptions.Exit(1)
