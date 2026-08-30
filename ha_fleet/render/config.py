@@ -8,6 +8,22 @@ import json
 from jinja2 import Environment, FileSystemLoader
 from ha_fleet.schemas.site import SiteManifest
 
+# Maps a substring found in a dashboard YAML to the vendored HACS card
+# bundle(s) it requires. Bundles live in <repo_root>/common/lovelace-resources
+# and are copied into www/community/ for sites whose dashboards reference them.
+# "register" lists the entry-point module(s) to declare under lovelace.resources;
+# "copy" includes any extra files (e.g. dynamically-fetched editors) that must
+# sit alongside the entry point but aren't themselves lovelace resources.
+LOVELACE_RESOURCE_MAP: Dict[str, Dict[str, List[str]]] = {
+    "custom:mushroom": {"register": ["mushroom.js"], "copy": ["mushroom.js"]},
+    "card_mod": {"register": ["card-mod.js"], "copy": ["card-mod.js"]},
+    "custom:stack-in-card": {"register": ["stack-in-card.js"], "copy": ["stack-in-card.js"]},
+    "custom:calendar-card-pro": {
+        "register": ["calendar-card-pro.js"],
+        "copy": ["calendar-card-pro.js", "calendar-card-pro-editor.js"],
+    },
+}
+
 
 class ConfigRenderer:
     """Render bundles + overlays into HAOS config files."""
@@ -266,6 +282,39 @@ class ConfigRenderer:
 
         return "\n\n".join(snippets) + "\n"
 
+    def _lovelace_resources_dir(self) -> Path | None:
+        """Locate the repo-shared common/lovelace-resources directory, if any."""
+        if self.site_path.parent.name != "sites":
+            return None
+        resources_dir = self.site_path.parent.parent / "common" / "lovelace-resources"
+        return resources_dir if resources_dir.is_dir() else None
+
+    def _required_lovelace_resources(self, dashboards: Dict[str, Any]) -> Dict[str, List[str]]:
+        """Scan dashboard source text for known HACS card markers.
+
+        Returns {"register": [...], "copy": [...]} vendored JS filenames
+        (deduplicated, first-seen order) needed by this site's dashboards,
+        per LOVELACE_RESOURCE_MAP.
+        """
+        register: List[str] = []
+        copy: List[str] = []
+        texts = []
+        for dashboard_data in dashboards.values():
+            source_file = dashboard_data.get("source") if isinstance(dashboard_data, dict) else None
+            if source_file and Path(source_file).exists():
+                texts.append(Path(source_file).read_text(encoding="utf-8"))
+
+        combined = "\n".join(texts)
+        for marker, files in LOVELACE_RESOURCE_MAP.items():
+            if marker in combined:
+                for filename in files["register"]:
+                    if filename not in register:
+                        register.append(filename)
+                for filename in files["copy"]:
+                    if filename not in copy:
+                        copy.append(filename)
+        return {"register": register, "copy": copy}
+
     def _dashboard_slug(self, rel_path: str) -> str:
         """Build a stable dashboard key from relative file path."""
         slug = rel_path.replace("\\", "-").replace("/", "-").replace("_", "-").replace(".", "-")
@@ -289,9 +338,16 @@ class ConfigRenderer:
                 [
                     "lovelace:",
                     "  mode: storage",
-                    "  dashboards:",
                 ]
             )
+            required_resources = self._required_lovelace_resources(dashboards)["register"]
+            if required_resources and self._lovelace_resources_dir() is not None:
+                lines.append("  resource_mode: yaml")
+                lines.append("  resources:")
+                for filename in required_resources:
+                    lines.append(f"    - url: /local/community/{filename}")
+                    lines.append("      type: module")
+            lines.append("  dashboards:")
             for rel_path, dashboard_data in sorted(dashboards.items()):
                 site_slug = self.manifest.site_id.replace("_", "-").lower()
                 key = f"fleet-{site_slug}-{self._dashboard_slug(rel_path)}"
@@ -395,5 +451,20 @@ class ConfigRenderer:
                 output_file = output_dir / f"{section_name}.json"
                 with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(config_data, f, indent=2)
+
+        resources_dir = self._lovelace_resources_dir()
+        if resources_dir is not None:
+            needed_files = self._required_lovelace_resources(config["dashboards"])["copy"]
+            if needed_files:
+                community_dir = output_dir / "www" / "community"
+                community_dir.mkdir(parents=True, exist_ok=True)
+                for filename in needed_files:
+                    source_file = resources_dir / filename
+                    if source_file.exists():
+                        shutil.copy2(source_file, community_dir / filename)
+
+        site_www_dir = self.site_path / "assets" / "www"
+        if site_www_dir.is_dir():
+            shutil.copytree(site_www_dir, output_dir / "www", dirs_exist_ok=True)
 
         print(f"Rendered {len(config)} config files to {output_dir}")
