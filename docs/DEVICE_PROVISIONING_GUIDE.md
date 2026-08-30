@@ -111,6 +111,39 @@ Important:
 - Do not commit live secrets to git.
 - Keep only key contracts in repo, never values.
 
+### Configure Terminal & SSH Add-on (for `ha-fleet deploy`)
+
+`ha-fleet deploy` pushes rendered config to the device over SSH, then applies
+it via Home Assistant's own API. This requires the official **Terminal & SSH**
+add-on (`hassio-addons/app-ssh`), not Tailscale's own SSH feature —
+**Tailscale's SSH-proxy feature (`tailscale up --ssh`) is server-side blocked
+on Home Assistant OS.** Don't spend time trying to get `tailscale up --ssh`
+working; it's a known Tailscale limitation on this platform, not a
+misconfiguration. Plain SSH routed over the already-configured Tailscale
+private network works fine — only Tailscale's own identity-proxied SSH
+feature is blocked.
+
+1. Install the **Terminal & SSH** add-on from the add-on store.
+2. In its configuration, enable **SFTP** and set `username: root` (required
+   by this add-on for SFTP/SCP access — it will not work as a different user).
+3. Add the operator's SSH public key under `authorized_keys`. Generate a
+   dedicated deploy key if you don't already have one:
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/id_ha_fleet_deploy -C "ha-fleet-deploy"
+   ```
+4. Start the add-on, then verify manual SSH access over the tailnet works
+   *before* ever running `ha-fleet deploy`:
+   ```bash
+   ssh -i ~/.ssh/id_ha_fleet_deploy root@<tailnet-host-or-ip>
+   ```
+5. Set up the deploy target config for this site (operator machine, in
+   `ha-fleet-pilot-sites`):
+   ```bash
+   cp sites/site_001/operator/deploy_target.local.example.yaml \
+      sites/site_001/operator/deploy_target.local.yaml
+   # then edit host / ssh_key_path to match steps 3-4 above
+   ```
+
 ## 6. Validate Site Config Locally (Operator Machine)
 
 Before touching any edge device you can fully test your configuration on your
@@ -325,24 +358,85 @@ This reads:
 Use this as a rapid local loop. For production edge truth, continue ingesting
 from edge-generated backups.
 
-## 7. Canary Restore Test (Manual)
+### Deploy To Edge
 
-1. Upload backup artifact to the edge device (method of choice).
-2. Restore in HA UI (Settings -> System -> Backups -> Restore) or API flow.
-3. Wait for HA restart and stabilization.
-4. Verify:
-   - Required entities exist
+Once the Terminal & SSH add-on and `deploy_target.local.yaml` are set up
+(§5), pushing a config update is one command from `ha-fleet-pilot-sites`:
+
+```bash
+export HA_FLEET_DEPLOY_TOKEN="<long-lived access token>"
+
+../ha-fleet-tooling/.venv/Scripts/ha-fleet deploy push \
+    --site-path ./sites/site_001
+```
+
+This renders the site, asks the device to generate a real Home Assistant
+backup of its current state (a safety net — never a hand-built archive, see
+§7), pushes the rendered config over SCP, verifies the files landed intact by
+checksum, restarts Home Assistant, and polls the site's `required_entities`
+for up to 90s before reporting success or failure. On failure, it does **not**
+auto-rollback — it prints which entities are unhealthy and tells you to run
+`deploy rollback`.
+
+```bash
+# Re-check health standalone (e.g. after a manual fix on the device)
+ha-fleet deploy verify --site-path ./sites/site_001
+
+# Fast rollback: re-push the previous successful build + restart (no state loss)
+ha-fleet deploy rollback --site-path ./sites/site_001
+
+# Slow rollback: restore the full pre-deploy backup (reverts ALL state changes
+# since that snapshot, not just config — confirms before proceeding)
+ha-fleet deploy rollback --site-path ./sites/site_001 --mode snapshot
+```
+
+Prefer the `HA_FLEET_DEPLOY_TOKEN` env var over `--token-file`, and never pass
+a token as a bare CLI flag (it would land in shell history). A Home Assistant
+long-lived access token has no scope or expiry — treat leakage as equivalent
+to full admin compromise of that device.
+
+## 7. Canary Restore Test
+
+> **Important:** the archive produced by `ha-fleet bundle-to-backup` is **not**
+> a real, restorable Home Assistant backup. It uses a flat tar.gz layout
+> (`configuration.yaml`, `automations.yaml`, etc. at the root) intended only
+> for local inspection and feeding `ingest-backup`/`ingest-config-dir`. Real HA
+> backups are a different, specific format (an outer tar with `backup.json` +
+> a nested, `securetar`-built `homeassistant.tar.gz`). **Never upload a
+> `bundle-to-backup` artifact via the HA UI or `backup/restore` API and expect
+> it to restore** — it won't. `bundle-to-backup`'s actual purpose (feeding
+> discovery ingestion) is unaffected by this; just don't use it for restore.
+
+The actual canary test is running a real deploy against the freshly
+provisioned device:
+
+1. Complete §5's Terminal & SSH setup and `deploy_target.local.yaml` first.
+2. From the operator machine, run `ha-fleet deploy push --site-path
+   ./sites/site_001` (see §6 "Deploy To Edge") against the canary device.
+3. Confirm the command's own automated health check passes (it polls
+   `required_entities` for up to 90s and reports failures explicitly if any
+   don't come back healthy).
+4. Additionally spot-check in the HA UI:
+   - Required entities exist and have sensible states
    - Core automations loaded
    - Integrations healthy (Zigbee/MQTT/Calendar as applicable)
 
 ## 8. Rollback Drill
 
-1. Confirm previous backup is retained.
-2. Trigger restore to previous known-good backup.
-3. Re-validate health checks post-rollback.
+Using the canary deploy from §7:
+
+1. Run `ha-fleet deploy rollback --site-path ./sites/site_001` (default
+   `--mode config`: re-pushes the previous build and restarts — fast, no
+   state loss). Confirm health checks pass post-rollback.
+2. Also run the heavier path once: `ha-fleet deploy rollback --site-path
+   ./sites/site_001 --mode snapshot`. This restores the full pre-deploy
+   backup captured by `deploy push`'s safety-snapshot step, reverting **all**
+   state changes since that snapshot (not just config files) — confirm you
+   understand this tradeoff before relying on it during a real incident.
 
 Pilot requirement:
-- At least one successful rollback drill before scaling beyond canary.
+- At least one successful rollback drill of **each** mode before scaling
+  beyond canary.
 
 ## 9. Post-Provisioning Checklist
 
@@ -381,10 +475,18 @@ Pilot requirement:
 
 
 
-## 11. Next Step After Provisioning
+## 11. Remaining Future Work
 
-Move from manual restore to scripted edge preflight/deploy (Phase 3):
-- Edge preflight checks
-- Artifact verification (SHA256)
-- API-driven restore
-- Health check + rollback automation
+The scripted edge preflight/deploy flow described in §6-8 (`ha-fleet deploy
+push/verify/rollback`) covers preflight render, checksum verification,
+API-driven restart, and health-check + rollback automation. Remaining
+follow-ups, not yet built:
+- A faster `--reload-only` apply path for automation/script/helper-only
+  changes that don't need a full restart (today `deploy push` always does a
+  full restart, which is simple and safe but slower than necessary for small
+  changes).
+- Fleet-wide orchestration (deploying to N devices at once, staged rollout)
+  — today's tooling deploys to one device per invocation.
+- A secrets-manager-backed alternative to `HA_FLEET_DEPLOY_TOKEN`/
+  `--token-file` if the number of operators/devices grows past what
+  per-operator local config comfortably covers.

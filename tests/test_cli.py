@@ -6,6 +6,7 @@ import shutil
 import tarfile
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 from click.testing import CliRunner
@@ -13,12 +14,17 @@ from click.testing import CliRunner
 from ha_fleet.cli.commands import (
     bundle_to_backup,
     dev_site,
+    deploy_push,
+    deploy_rollback,
+    deploy_verify,
     diff,
     ingest_backup,
     ingest_config_dir,
     new_site,
     validate,
 )
+from ha_fleet.deploy.errors import DeployError
+from ha_fleet.deploy.orchestrator import DeployResult
 
 TEST_ROOT = Path("tests") / "_tmp"
 
@@ -296,6 +302,140 @@ def test_dev_site_render_creates_build_and_secrets() -> None:
 
         assert result.exit_code == 0
         assert (build_dir / "secrets.yaml").exists()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def _write_deploy_target(site_dir: Path) -> None:
+    (site_dir / "operator").mkdir(parents=True, exist_ok=True)
+    (site_dir / "operator" / "deploy_target.local.yaml").write_text(
+        'host: "100.1.2.3"\nssh_key_path: "~/.ssh/id_test"\ntoken: "tok"\n',
+        encoding="utf-8",
+    )
+
+
+def test_deploy_push_success_exits_zero() -> None:
+    """deploy push should print OK and exit 0 when the orchestrator succeeds."""
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_push") as mock_run_push:
+            mock_run_push.return_value = DeployResult(ok=True, message="Deploy succeeded.", health=None)
+
+            runner = CliRunner()
+            result = runner.invoke(deploy_push, ["--site-path", str(case_dir)])
+
+        assert result.exit_code == 0
+        assert "OK Deploy succeeded." in result.output
+        mock_run_push.assert_called_once()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_push_failure_exits_nonzero() -> None:
+    """deploy push should exit 1 and not print OK when the orchestrator reports failure."""
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_push") as mock_run_push:
+            mock_run_push.return_value = DeployResult(ok=False, message="Health check failed.", health=None)
+
+            runner = CliRunner()
+            result = runner.invoke(deploy_push, ["--site-path", str(case_dir)])
+
+        assert result.exit_code != 0
+        assert "OK" not in result.output
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_push_missing_target_config_exits_nonzero() -> None:
+    """deploy push should fail cleanly if deploy_target.local.yaml doesn't exist."""
+    case_dir = _new_case_dir()
+    try:
+        runner = CliRunner()
+        result = runner.invoke(deploy_push, ["--site-path", str(case_dir)])
+
+        assert result.exit_code != 0
+        assert "Deploy failed" in result.output
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_rollback_config_mode_success() -> None:
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_rollback") as mock_run_rollback:
+            mock_run_rollback.return_value = DeployResult(ok=True, message="Config rollback complete.")
+
+            runner = CliRunner()
+            result = runner.invoke(deploy_rollback, ["--site-path", str(case_dir)])
+
+        assert result.exit_code == 0
+        mock_run_rollback.assert_called_once()
+        _, kwargs = mock_run_rollback.call_args
+        assert kwargs.get("mode", "config") == "config"
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_rollback_snapshot_mode_requires_confirmation() -> None:
+    """--mode snapshot without --yes should prompt and abort when declined."""
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_rollback") as mock_run_rollback:
+            runner = CliRunner()
+            result = runner.invoke(
+                deploy_rollback,
+                ["--site-path", str(case_dir), "--mode", "snapshot"],
+                input="n\n",
+            )
+
+        assert result.exit_code != 0
+        mock_run_rollback.assert_not_called()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_rollback_snapshot_mode_with_yes_skips_prompt() -> None:
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_rollback") as mock_run_rollback:
+            mock_run_rollback.return_value = DeployResult(ok=True, message="Snapshot restore complete.")
+
+            runner = CliRunner()
+            result = runner.invoke(
+                deploy_rollback,
+                ["--site-path", str(case_dir), "--mode", "snapshot", "--yes"],
+            )
+
+        assert result.exit_code == 0
+        mock_run_rollback.assert_called_once()
+    finally:
+        _cleanup_case_dir(case_dir)
+
+
+def test_deploy_verify_reports_orchestrator_error() -> None:
+    case_dir = _new_case_dir()
+    try:
+        _write_deploy_target(case_dir)
+
+        with patch("ha_fleet.cli.commands.run_verify") as mock_run_verify:
+            mock_run_verify.side_effect = DeployError("device unreachable")
+
+            runner = CliRunner()
+            result = runner.invoke(deploy_verify, ["--site-path", str(case_dir)])
+
+        assert result.exit_code != 0
+        assert "device unreachable" in result.output
     finally:
         _cleanup_case_dir(case_dir)
 

@@ -10,6 +10,7 @@ from ha_fleet.cli.commands import (
     ingest_config_dir,
     new_site,
     dev_site,
+    deploy,
 )
 
 
@@ -28,6 +29,7 @@ main.add_command(ingest_backup)
 main.add_command(ingest_config_dir)
 main.add_command(new_site)
 main.add_command(dev_site)
+main.add_command(deploy)
 
 if __name__ == "__main__":
     main()
